@@ -37,6 +37,8 @@ const loader = new GLTFLoader()
 loader.register((parser) => new VRMLoaderPlugin(parser))
 
 let vrm = null
+let armSign = 1
+let baseYaw = 0
 const restRotations = new Map()
 
 async function loadModel(url) {
@@ -52,7 +54,11 @@ async function loadModel(url) {
   const gltf = await loader.loadAsync(url)
   vrm = gltf.userData.vrm
   VRMUtils.rotateVRM0(vrm)
+  armSign = vrm.meta?.metaVersion === "0" ? -1 : 1
+  baseYaw = armSign < 0 ? Math.PI : 0
+  vrm.scene.rotation.y = baseYaw
   scene.add(vrm.scene)
+  console.log(`VRM meta=${vrm.meta?.metaVersion ?? "?"} armSign=${armSign} bones=${vrm.humanoid ? "yes" : "no"}`)
 
   const box = new THREE.Box3().setFromObject(vrm.scene)
   const size = box.getSize(new THREE.Vector3())
@@ -90,7 +96,6 @@ const poses = {
   talk: 3,
   wave: 2.2,
   dance: 4.5,
-  danceLong: 12,
   look: 2.6,
   stretch: 2.8,
   bow: 2.0,
@@ -122,7 +127,8 @@ function addBoneRotation(name, x, y, z) {
   const node = vrm?.humanoid?.getNormalizedBoneNode(name)
   const rest = restRotations.get(name)
   if (!node || !rest) return
-  node.rotation.set(rest.x + x, rest.y + y, rest.z + z)
+  const flip = name === "rightUpperArm" || name === "leftUpperArm" ? armSign : 1
+  node.rotation.set(rest.x + x, rest.y + y, rest.z + z * flip)
 }
 
 function cleanText(text) {
@@ -499,7 +505,6 @@ menu.addEventListener("click", (event) => {
   else if (action === "voice") testVoice()
   else if (action === "mute") toggleVoice()
   else if (action === "dance") setPose("dance")
-  else if (action === "danceLong") setPose("danceLong")
   else if (action === "settings") void openSettings()
   else if (action === "models") void window.pet?.openModels()
   else if (action === "quit") window.pet?.quit()
@@ -595,19 +600,9 @@ function animate() {
 
   if (pose !== "idle" && elapsed > poses[pose]) setPose("idle")
   if (pose === "idle" && !speaking && performance.now() > nextIdle) {
-    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips", "danceLong"]
+    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips"]
     setPose(actions[Math.floor(Math.random() * actions.length)])
     nextIdle = performance.now() + 8000 + Math.random() * 8000
-  }
-  if (
-    !speaking &&
-    !dragging &&
-    composer.classList.contains("hidden") &&
-    settings.classList.contains("hidden") &&
-    performance.now() > nextWander
-  ) {
-    nextWander = performance.now() + 20000 + Math.random() * 20000
-    if (Math.random() < 0.6) window.pet?.wander()
   }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
@@ -617,24 +612,15 @@ function animate() {
   if (vrm) {
     vrm.scene.position.y = 0
 
-    const targetYaw = walking ? walkDir * (Math.PI / 2) : 0
-    vrm.scene.rotation.y += (targetYaw - vrm.scene.rotation.y) * Math.min(1, delta * 8)
+    vrm.scene.rotation.y = baseYaw
 
-    if (walking) {
-      const phase = time * 8
-      addBoneRotation("leftUpperLeg", Math.sin(phase) * 0.45, 0, 0)
-      addBoneRotation("rightUpperLeg", -Math.sin(phase) * 0.45, 0, 0)
-      addBoneRotation("rightUpperArm", Math.sin(phase) * 0.4, 0, 1.05)
-      addBoneRotation("leftUpperArm", -Math.sin(phase) * 0.4, 0, -1.05)
-      addBoneRotation("head", 0, 0, 0)
-    } else {
-      addBoneRotation("leftUpperLeg", 0, 0, 0)
-      addBoneRotation("rightUpperLeg", 0, 0, 0)
-      addBoneRotation("head", 0, 0, 0)
-      addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
-      addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
+    addBoneRotation("leftUpperLeg", 0, 0, 0)
+    addBoneRotation("rightUpperLeg", 0, 0, 0)
+    addBoneRotation("head", 0, 0, 0)
+    addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
+    addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
 
-      if (pose === "wave") {
+    if (pose === "wave") {
         addBoneRotation("rightUpperArm", 0, 0, -1.5 + Math.sin(elapsed * 9) * 0.25)
       } else if (pose === "dance") {
         addBoneRotation("rightUpperArm", 0, 0, 0.4 + Math.sin(elapsed * 6.4) * 0.7)
@@ -662,29 +648,7 @@ function animate() {
         addBoneRotation("rightUpperArm", 0, 0, 1.6 + Math.sin(elapsed * 3) * 0.05)
         addBoneRotation("leftUpperArm", 0, 0, -1.6 - Math.sin(elapsed * 3) * 0.05)
         addBoneRotation("head", 0, Math.sin(elapsed * 2.5) * 0.18, 0)
-      } else if (pose === "danceLong") {
-        const phase = elapsed % 12
-        if (phase < 3) {
-          addBoneRotation("rightUpperArm", 0, 0, -1.2 + Math.sin(elapsed * 6) * 0.6)
-          addBoneRotation("leftUpperArm", 0, 0, 1.2 - Math.sin(elapsed * 6) * 0.6)
-          addBoneRotation("head", 0, Math.sin(elapsed * 3) * 0.2, 0)
-        } else if (phase < 6) {
-          addBoneRotation("rightUpperArm", 0, 0, 0.2 + Math.sin(elapsed * 6) * 0.8)
-          addBoneRotation("leftUpperArm", 0, 0, -0.2 - Math.sin(elapsed * 6) * 0.8)
-          addBoneRotation("leftUpperLeg", Math.sin(elapsed * 6) * 0.25, 0, 0)
-          addBoneRotation("rightUpperLeg", -Math.sin(elapsed * 6) * 0.25, 0, 0)
-        } else if (phase < 9) {
-          const beat = Math.abs(Math.sin(elapsed * 6.5))
-          addBoneRotation("rightUpperArm", -0.6, 0, 0.4 + beat * 0.2)
-          addBoneRotation("leftUpperArm", -0.6, 0, -0.4 - beat * 0.2)
-          addBoneRotation("head", 0, 0, Math.sin(elapsed * 3) * 0.06)
-        } else {
-          addBoneRotation("rightUpperArm", 0, 0, -2.0 + Math.sin(elapsed * 5) * 0.2)
-          addBoneRotation("leftUpperArm", 0, 0, 2.0 - Math.sin(elapsed * 5) * 0.2)
-          addBoneRotation("head", -0.1, 0, 0)
-        }
       }
-    }
 
     if (time > nextBlink) {
       blinkUntil = time + 0.12
