@@ -11,6 +11,7 @@ interface ProjectInfo {
 
 const DOCK_WIDTH = 320
 const STORAGE_KEY = "opencodeex.dock.open"
+const HIDDEN_KEY = "opencodeex.hidden"
 
 const basename = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path
 
@@ -21,7 +22,11 @@ body.opencodeex-docked main{padding-left:${DOCK_WIDTH}px;box-sizing:border-box}
 .opencodeex-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 4px}
 .opencodeex-title{font-size:14px;font-weight:600;line-height:1.2}
 .opencodeex-list{display:flex;flex-direction:column;gap:1px;flex:1;overflow:auto;margin:0;padding:0;list-style:none}
-.opencodeex-item{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border:0;border-radius:8px;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.opencodeex-item{display:flex;align-items:center;gap:10px;width:100%;padding:7px 30px 7px 8px;border:0;border-radius:8px;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.opencodeex-row{position:relative;display:flex}
+.opencodeex-hide{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;opacity:0;cursor:pointer}
+.opencodeex-row:hover .opencodeex-hide{opacity:.5}
+.opencodeex-row .opencodeex-hide:hover{opacity:1;background:rgba(127,127,127,.2)}
 .opencodeex-item:hover{background:rgba(127,127,127,.12)}
 .opencodeex-item[data-current="true"]{background:rgba(127,127,127,.2)}
 .opencodeex-badge{display:flex;align-items:center;justify-content:center;flex:none;width:22px;height:22px;border-radius:6px;background:rgba(127,127,127,.22);font-size:11px;font-weight:600;line-height:1}
@@ -51,6 +56,9 @@ export default Plugin.define({
       refresh: "Refresh",
       collapse: "Collapse",
       add: "Add project",
+      hidden: "Hidden projects",
+      hide: "Hide",
+      allHidden: "All projects are hidden",
       current: "Current project",
     },
     zh: {
@@ -64,6 +72,9 @@ export default Plugin.define({
       refresh: "刷新",
       collapse: "收起",
       add: "添加项目",
+      hidden: "已隐藏的项目",
+      hide: "隐藏",
+      allHidden: "项目都已隐藏",
       current: "当前项目",
     },
   },
@@ -93,9 +104,52 @@ export default Plugin.define({
       return "sidecar"
     }
 
-    const openProject = (project: ProjectInfo) => {
-      ctx.layout.draft({ server: builtinServer(), directory: project.canonical, prompt: "" })
+    const pathKey = (project: ProjectInfo) => project.canonical.replace(/[\\/]+$/, "").toLowerCase()
+
+    const openProject = async (project: ProjectInfo) => {
+      const server = builtinServer()
+      try {
+        const page = await ctx.client.session.list({
+          directory: project.canonical,
+          limit: 20,
+          order: "desc",
+          archived: "false",
+        })
+        const latest = page.data.find((session) => !session.parentID)
+        if (latest) {
+          ctx.tabs.open({ server, id: latest.id }, { focus: true })
+          return
+        }
+      } catch (err) {
+        console.error("[opencodeex] session.list failed", err)
+      }
+      ctx.layout.draft({ server, directory: project.canonical, prompt: "" })
     }
+
+    const readHidden = (): string[] => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")
+        return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []
+      } catch {
+        return []
+      }
+    }
+
+    const [hidden, setHidden] = createSignal<string[]>(readHidden())
+    const hiddenSet = () => new Set(hidden())
+
+    const persistHidden = (next: string[]) => {
+      setHidden(next)
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify(next))
+    }
+
+    const hideProject = (project: ProjectInfo) => {
+      const key = pathKey(project)
+      if (hiddenSet().has(key)) return
+      persistHidden([...hidden(), key])
+    }
+
+    const restoreProject = (key: string) => persistHidden(hidden().filter((value) => value !== key))
 
     function ProjectList() {
       const [projects, setProjects] = createSignal<readonly ProjectInfo[]>()
@@ -130,6 +184,19 @@ export default Plugin.define({
           <div class="opencodeex-head">
             <span class="opencodeex-title">{ctx.t("title")}</span>
             <div style={{ display: "flex", gap: "2px" }}>
+              <Show when={hidden().length > 0}>
+                <ui.Menu
+                  label={ctx.t("hidden")}
+                  trigger="icon"
+                  icon="outline-eye-slash"
+                  placement="bottom-end"
+                  items={hidden().map((key) => ({
+                    label: basename(key),
+                    icon: "arrow-undo-down" as const,
+                    onSelect: () => restoreProject(key),
+                  }))}
+                />
+              </Show>
               <ui.IconButton
                 icon="plus"
                 label={ctx.t("add")}
@@ -158,33 +225,52 @@ export default Plugin.define({
             }
           >
             <Show when={projects()} fallback={<ui.Loader size="large" />}>
-              {(items) => (
-                <Show when={items().length > 0} fallback={<p class="opencodeex-empty">{ctx.t("empty")}</p>}>
-                  <ul class="opencodeex-list">
-                    <For each={items()}>
-                      {(project) => (
-                        <li>
-                          <button
-                            type="button"
-                            class="opencodeex-item"
-                            data-current={same(project)}
-                            title={same(project) ? ctx.t("current") : project.canonical}
-                            onClick={() => openProject(project)}
-                          >
-                            <span
-                              class="opencodeex-badge"
-                              style={badgeColor(project) ? { "background-color": badgeColor(project) } : undefined}
+              {(items) => {
+                const shown = () => items().filter((project) => !hiddenSet().has(pathKey(project)))
+                return (
+                  <Show
+                    when={shown().length > 0}
+                    fallback={
+                      <p class="opencodeex-empty">{items().length > 0 ? ctx.t("allHidden") : ctx.t("empty")}</p>
+                    }
+                  >
+                    <ul class="opencodeex-list">
+                      <For each={shown()}>
+                        {(project) => (
+                          <li class="opencodeex-row">
+                            <button
+                              type="button"
+                              class="opencodeex-item"
+                              data-current={same(project)}
+                              title={same(project) ? ctx.t("current") : project.canonical}
+                              onClick={() => void openProject(project)}
                             >
-                              {badgeText(project)}
-                            </span>
-                            <span class="opencodeex-name">{label(project)}</span>
-                          </button>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </Show>
-              )}
+                              <span
+                                class="opencodeex-badge"
+                                style={badgeColor(project) ? { "background-color": badgeColor(project) } : undefined}
+                              >
+                                {badgeText(project)}
+                              </span>
+                              <span class="opencodeex-name">{label(project)}</span>
+                            </button>
+                            <button
+                              type="button"
+                              class="opencodeex-hide"
+                              title={ctx.t("hide")}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                hideProject(project)
+                              }}
+                            >
+                              <ui.Icon name="xmark-small" size="small" />
+                            </button>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+                )
+              }}
             </Show>
           </Show>
         </>
