@@ -143,6 +143,72 @@ body {
   font: 12px "Microsoft YaHei", system-ui, sans-serif;
 }
 
+.dd {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.dd-trigger {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 14, 0.9);
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dd-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.dd-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(16, 18, 24, 0.99);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+.dd-list.hidden {
+  display: none;
+}
+
+.dd-option {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dd-option:hover {
+  background: rgba(80, 110, 200, 0.3);
+}
+
+.dd-option.active {
+  background: rgba(80, 110, 200, 0.45);
+}
+
 .hint {
   min-height: 16px;
   font-size: 11px;

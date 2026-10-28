@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron")
 contextBridge.exposeInMainWorld("pet", {
   dragStart: (offset) => ipcRenderer.send("pet:drag-start", offset),
   dragEnd: () => ipcRenderer.send("pet:drag-end"),
+  wander: () => ipcRenderer.send("pet:wander"),
   chat: (text, history, model) => ipcRenderer.invoke("pet:chat", { text, history, model }),
   models: () => ipcRenderer.invoke("pet:models"),
   speak: (text, voice, options) => ipcRenderer.invoke("pet:speak", { text, voice, ...options }),

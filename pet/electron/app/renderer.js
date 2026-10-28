@@ -8,11 +8,11 @@ const composer = document.getElementById("composer")
 const promptInput = document.getElementById("prompt")
 const sendButton = document.getElementById("send")
 const settings = document.getElementById("settings")
-const modeSelect = document.getElementById("mode")
-const modelSelect = document.getElementById("model")
-const voiceSelect = document.getElementById("voice")
-const rateSelect = document.getElementById("rate")
-const pitchSelect = document.getElementById("pitch")
+const ddMode = document.getElementById("dd-mode")
+const ddModel = document.getElementById("dd-model")
+const ddVoice = document.getElementById("dd-voice")
+const ddRate = document.getElementById("dd-rate")
+const ddPitch = document.getElementById("dd-pitch")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
 
@@ -64,6 +64,7 @@ const poses = {
   talk: 3,
   wave: 2.2,
   dance: 4.5,
+  look: 2.6,
 }
 
 let pose = "idle"
@@ -75,6 +76,8 @@ let nextBlink = 2
 let blinkUntil = 0
 let mouthTimer = 0
 let mouthIndex = 0
+let nextIdle = performance.now() + 5000
+let nextWander = performance.now() + 15000
 const visemes = ["aa", "ih", "ou", "ee", "oh"]
 
 const restRotations = new Map()
@@ -239,32 +242,157 @@ async function sendPrompt() {
 }
 
 let models = []
-const savedMode = localStorage.getItem("pet.mode") || "go"
-const savedModel = localStorage.getItem("pet.model") || ""
-modeSelect.value = savedMode
-voiceSelect.value = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
-voiceSelect.addEventListener("change", () => localStorage.setItem("pet.voiceName", voiceSelect.value))
-rateSelect.value = localStorage.getItem("pet.rate") || "+0%"
-rateSelect.addEventListener("change", () => localStorage.setItem("pet.rate", rateSelect.value))
-pitchSelect.value = localStorage.getItem("pet.pitch") || "+0Hz"
-pitchSelect.addEventListener("change", () => localStorage.setItem("pet.pitch", pitchSelect.value))
+
+const modeOptions = [
+  { value: "go", label: "OpenCode Go" },
+  { value: "api", label: "API" },
+]
+
+const voiceOptions = [
+  { value: "zh-CN-XiaoxiaoNeural", label: "晓晓 · 温暖（女）" },
+  { value: "zh-CN-XiaoyiNeural", label: "晓伊 · 二次元（女）" },
+  { value: "zh-CN-YunjianNeural", label: "云健 · 激情（男）" },
+  { value: "zh-CN-YunxiNeural", label: "云希 · 阳光（男）" },
+  { value: "zh-CN-YunxiaNeural", label: "云夏 · 可爱（男）" },
+  { value: "zh-CN-YunyangNeural", label: "云扬 · 专业（男）" },
+  { value: "zh-CN-liaoning-XiaobeiNeural", label: "晓北 · 东北话（女）" },
+  { value: "zh-CN-shaanxi-XiaoniNeural", label: "晓妮 · 陕西话（女）" },
+  { value: "zh-HK-HiuGaaiNeural", label: "曉佳 · 粤语（女）" },
+  { value: "zh-HK-HiuMaanNeural", label: "曉曼 · 粤语（女）" },
+  { value: "zh-HK-WanLungNeural", label: "雲龍 · 粤语（男）" },
+  { value: "zh-TW-HsiaoChenNeural", label: "曉臻 · 台湾（女）" },
+  { value: "zh-TW-HsiaoYuNeural", label: "曉雨 · 台湾（女）" },
+  { value: "zh-TW-YunJheNeural", label: "雲哲 · 台湾（男）" },
+  { value: "system", label: "系统语音（离线）" },
+]
+
+const rateOptions = [
+  { value: "-20%", label: "慢" },
+  { value: "-10%", label: "稍慢" },
+  { value: "+0%", label: "正常" },
+  { value: "+10%", label: "稍快" },
+  { value: "+20%", label: "快" },
+]
+
+const pitchOptions = [
+  { value: "-5Hz", label: "低" },
+  { value: "+0Hz", label: "正常" },
+  { value: "+5Hz", label: "高" },
+  { value: "+10Hz", label: "很高（偏二次元）" },
+]
+
+function closeAllDropdowns(except) {
+  document.querySelectorAll(".dd-list").forEach((element) => {
+    if (element !== except) element.classList.add("hidden")
+  })
+}
+
+function createDropdown(root, options, value, onChange) {
+  let current = value
+  let items = options
+
+  const trigger = document.createElement("button")
+  trigger.type = "button"
+  trigger.className = "dd-trigger"
+  const list = document.createElement("div")
+  list.className = "dd-list hidden"
+
+  const render = () => {
+    list.innerHTML = ""
+    for (const option of items) {
+      const button = document.createElement("button")
+      button.type = "button"
+      button.className = `dd-option${option.value === current ? " active" : ""}`
+      button.textContent = option.label
+      button.addEventListener("click", (event) => {
+        event.stopPropagation()
+        current = option.value
+        list.classList.add("hidden")
+        render()
+        onChange?.(current)
+      })
+      list.appendChild(button)
+    }
+    const selected = items.find((item) => item.value === current)
+    trigger.textContent = selected?.label ?? items[0]?.label ?? ""
+  }
+
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation()
+    closeAllDropdowns(list)
+    list.classList.toggle("hidden")
+  })
+
+  root.append(trigger, list)
+  render()
+
+  return {
+    get value() {
+      return current
+    },
+    setOptions(next) {
+      items = next
+      if (!next.some((item) => item.value === current)) current = next[0]?.value
+      render()
+    },
+    setValue(next) {
+      current = next
+      render()
+    },
+  }
+}
+
+const modeDropdown = createDropdown(
+  ddMode,
+  modeOptions,
+  localStorage.getItem("pet.mode") || "go",
+  (value) => {
+    localStorage.setItem("pet.mode", value)
+    fillModels()
+  },
+)
+
+const modelDropdown = createDropdown(ddModel, [], "", (value) => {
+  localStorage.setItem("pet.model", value)
+  settingsHint.textContent = "已选择模型"
+})
+
+const voiceDropdown = createDropdown(
+  ddVoice,
+  voiceOptions,
+  localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural",
+  (value) => localStorage.setItem("pet.voiceName", value),
+)
+
+const rateDropdown = createDropdown(
+  ddRate,
+  rateOptions,
+  localStorage.getItem("pet.rate") || "+0%",
+  (value) => localStorage.setItem("pet.rate", value),
+)
+
+const pitchDropdown = createDropdown(
+  ddPitch,
+  pitchOptions,
+  localStorage.getItem("pet.pitch") || "+0Hz",
+  (value) => localStorage.setItem("pet.pitch", value),
+)
 
 function fillModels() {
-  const mode = modeSelect.value
+  const mode = modeDropdown.value
   const list = models.filter((item) =>
     mode === "go" ? item.providerID === "opencode-go" : item.providerID !== "opencode-go",
   )
-  modelSelect.innerHTML = ""
-  for (const item of list) {
-    const option = document.createElement("option")
-    option.value = `${item.providerID}|${item.id}`
-    option.textContent = `${item.name} (${item.providerID})`
-    modelSelect.appendChild(option)
+  const options = list.map((item) => ({
+    value: `${item.providerID}|${item.id}`,
+    label: `${item.name} (${item.providerID})`,
+  }))
+  modelDropdown.setOptions(options)
+  const saved = localStorage.getItem("pet.model") || ""
+  if (saved && options.some((option) => option.value === saved)) {
+    modelDropdown.setValue(saved)
   }
-  if (savedModel && list.some((item) => `${item.providerID}|${item.id}` === savedModel)) {
-    modelSelect.value = savedModel
-  }
-  settingsHint.textContent = list.length ? "" : "该来源没有可用模型"
+  settingsHint.textContent = options.length ? "" : "该来源没有可用模型"
 }
 
 async function openSettings() {
@@ -322,22 +450,10 @@ promptInput.addEventListener("keydown", (event) => {
   }
 })
 
-modeSelect.addEventListener("change", () => {
-  localStorage.setItem("pet.mode", modeSelect.value)
-  fillModels()
-})
-
-modelSelect.addEventListener("change", () => {
-  const value = modelSelect.value
-  const [providerID, id] = value.split("|")
-  if (!providerID || !id) return
-  localStorage.setItem("pet.model", value)
-  settingsHint.textContent = "已选择模型"
-})
-
 let dragging = false
 
 window.addEventListener("mousedown", (event) => {
+  if (!event.target.closest(".dd")) closeAllDropdowns()
   if (!menu.classList.contains("hidden") && !menu.contains(event.target)) closeMenu()
   if (
     !settings.classList.contains("hidden") &&
@@ -371,6 +487,21 @@ function animate() {
   const elapsed = (performance.now() - poseStarted) / 1000
 
   if (pose !== "idle" && elapsed > poses[pose]) setPose("idle")
+  if (pose === "idle" && !speaking && performance.now() > nextIdle) {
+    const actions = ["wave", "dance", "talk", "look"]
+    setPose(actions[Math.floor(Math.random() * actions.length)])
+    nextIdle = performance.now() + 8000 + Math.random() * 8000
+  }
+  if (
+    !speaking &&
+    !dragging &&
+    composer.classList.contains("hidden") &&
+    settings.classList.contains("hidden") &&
+    performance.now() > nextWander
+  ) {
+    nextWander = performance.now() + 20000 + Math.random() * 20000
+    if (Math.random() < 0.6) window.pet?.wander()
+  }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
     hiddenAt = 0
@@ -393,6 +524,8 @@ function animate() {
     } else if (pose === "talk") {
       addBoneRotation("head", Math.sin(elapsed * 6) * 0.05, 0, 0)
       addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
+    } else if (pose === "look") {
+      addBoneRotation("head", 0, Math.sin(elapsed * 2.2) * 0.45, 0)
     }
 
     if (time > nextBlink) {
@@ -422,3 +555,15 @@ function animate() {
 }
 
 animate()
+
+setTimeout(async () => {
+  const menu = document.getElementById("menu")
+  menu.classList.remove("hidden")
+  menu.querySelector('[data-action="settings"]').click()
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  const settingsVisible = !document.getElementById("settings").classList.contains("hidden")
+  const trigger = document.querySelector("#dd-voice .dd-trigger")
+  trigger?.click()
+  const list = document.querySelector("#dd-voice .dd-list")
+  console.log(`ui2-check settings=${settingsVisible} open=${list ? !list.classList.contains("hidden") : false} options=${list?.querySelectorAll("button").length ?? 0}`)
+}, 4000)

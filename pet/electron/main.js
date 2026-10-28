@@ -185,6 +185,43 @@ ipcMain.on("pet:drag-end", () => {
   dragTimer = null
 })
 
+let wanderTimer = null
+
+ipcMain.on("pet:wander", () => {
+  if (!win || win.isDestroyed() || wanderTimer) return
+  const display = screen.getPrimaryDisplay()
+  const scale = display.scaleFactor || 1
+  const area = display.workArea
+  const [x, y] = win.getPosition()
+  const [width, height] = win.getSize()
+
+  const maxX = Math.round((area.x + area.width) / scale - width - 16)
+  const maxY = Math.round((area.y + area.height) / scale - height - 16)
+  const targetX = Math.max(16, Math.min(maxX, x + Math.round((Math.random() - 0.5) * 280)))
+  const targetY = Math.max(16, Math.min(maxY, y + Math.round((Math.random() - 0.5) * 180)))
+
+  const steps = 40
+  let step = 0
+  wanderTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) {
+      clearInterval(wanderTimer)
+      wanderTimer = null
+      return
+    }
+    step += 1
+    const t = step / steps
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+    win.setPosition(
+      Math.round(x + (targetX - x) * ease),
+      Math.round(y + (targetY - y) * ease),
+    )
+    if (step >= steps) {
+      clearInterval(wanderTimer)
+      wanderTimer = null
+    }
+  }, 30)
+})
+
 ipcMain.on("pet:quit", () => app.quit())
 
 app.whenReady().then(createWindow)
