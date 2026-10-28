@@ -555,15 +555,3 @@ function animate() {
 }
 
 animate()
-
-setTimeout(async () => {
-  const menu = document.getElementById("menu")
-  menu.classList.remove("hidden")
-  menu.querySelector('[data-action="settings"]').click()
-  await new Promise((resolve) => setTimeout(resolve, 1200))
-  const settingsVisible = !document.getElementById("settings").classList.contains("hidden")
-  const trigger = document.querySelector("#dd-voice .dd-trigger")
-  trigger?.click()
-  const list = document.querySelector("#dd-voice .dd-list")
-  console.log(`ui2-check settings=${settingsVisible} open=${list ? !list.classList.contains("hidden") : false} options=${list?.querySelectorAll("button").length ?? 0}`)
-}, 4000)
