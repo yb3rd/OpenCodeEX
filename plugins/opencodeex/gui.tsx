@@ -95,6 +95,7 @@ export default Plugin.define({
       unmute: "Unmute",
       dance: "Dance",
       hideAvatar: "Hide assistant",
+      testVoice: "Test voice",
       avatarCommand: "Toggle assistant",
       dragHint: "Drag to move, double-click to reset",
       allHidden: "All projects are hidden",
@@ -122,6 +123,7 @@ export default Plugin.define({
       unmute: "开启朗读",
       dance: "跳个舞",
       hideAvatar: "隐藏助手",
+      testVoice: "朗读测试",
       avatarCommand: "显示/隐藏助手",
       dragHint: "拖动移动位置，双击复位",
       allHidden: "项目都已隐藏",
@@ -656,22 +658,7 @@ export default Plugin.define({
 
     let suppressClick = false
 
-    const viewport = () => {
-      const sane = (value: number) => Number.isFinite(value) && value > -1000
-      if (!sane(window.screenX) || !sane(window.screenY)) {
-        return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
-      }
-      const dpr = window.devicePixelRatio || 1
-      const screen = window.screen
-      const availW = screen.width > window.innerWidth * 1.1 ? screen.width / dpr : screen.width
-      const availH = screen.height > window.innerHeight * 1.1 ? screen.height / dpr : screen.height
-      return {
-        left: Math.max(0, -window.screenX),
-        top: Math.max(0, -window.screenY),
-        right: Math.min(window.innerWidth, availW - window.screenX),
-        bottom: Math.min(window.innerHeight, availH - window.screenY),
-      }
-    }
+    const viewport = () => ({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight })
 
     const dragAvatar = {
       active: null as null | { startX: number; startY: number; originX: number; originY: number; moved: boolean },
@@ -731,6 +718,7 @@ export default Plugin.define({
     }
 
     let playAction: ((pose: Pose) => void) | undefined
+    let lastText = ""
 
     const toSpeech = (text: string) =>
       text
@@ -762,9 +750,16 @@ export default Plugin.define({
 
     const showText = (text: string) => {
       const plain = toSpeech(text)
+      lastText = plain
       setBubble(plain.length > 240 ? `${plain.slice(0, 240)}…` : plain)
       playAction?.("talk")
       if (voiceOn()) speak(plain)
+    }
+
+    const testVoice = () => {
+      const text = lastText || "你好，我是 OpenCodeEX 助手，语音测试正常。"
+      speechSynthesis.cancel()
+      speak(text)
     }
 
     let lastSpoken = ""
@@ -1007,6 +1002,14 @@ export default Plugin.define({
             <button
               type="button"
               class="opencodeex-avatar-btn"
+              title={ctx.t("testVoice")}
+              onClick={testVoice}
+            >
+              📢
+            </button>
+            <button
+              type="button"
+              class="opencodeex-avatar-btn"
               title={ctx.t("dance")}
               onClick={() => playAction?.("dance")}
             >
@@ -1048,8 +1051,17 @@ export default Plugin.define({
 
       avatarHost.style.left = "auto"
       avatarHost.style.top = "auto"
-      avatarHost.style.right = `${24 + Math.max(0, window.innerWidth - area.right)}px`
-      avatarHost.style.bottom = `${24 + Math.max(0, window.innerHeight - area.bottom)}px`
+
+      // 默认位置：窗口右下角；窗口超出屏幕时拉回可见区域
+      const dpr = window.devicePixelRatio || 1
+      const s = window.screen
+      const sane = Number.isFinite(window.screenX) && window.screenX > -1000
+      const availW = sane && s.width > window.innerWidth * 1.1 ? s.width / dpr : s.width
+      const availH = sane && s.height > window.innerHeight * 1.1 ? s.height / dpr : s.height
+      const visibleRight = sane ? Math.min(window.innerWidth, availW - window.screenX) : window.innerWidth
+      const visibleBottom = sane ? Math.min(window.innerHeight, availH - window.screenY) : window.innerHeight
+      avatarHost.style.right = `${24 + Math.max(0, window.innerWidth - visibleRight)}px`
+      avatarHost.style.bottom = `${24 + Math.max(0, window.innerHeight - visibleBottom)}px`
     }
 
     const apply = () => {
@@ -1113,6 +1125,7 @@ export default Plugin.define({
     })
 
     const toggle = () => setOpen((v) => !v)
+
 
 
 
