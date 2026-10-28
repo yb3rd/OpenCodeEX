@@ -26,7 +26,7 @@ OpenCodeEX/
 └─ plugins/
    └─ opencodeex/                     # 桌面 GUI 插件：项目快捷入口
       ├─ index.ts                     # 服务端部分（声明 id）
-      ├─ gui.tsx                      # 窗口部分（按钮 / 命令 / 对话框）
+      ├─ gui.tsx                      # 窗口部分（左侧常驻 Dock）
       ├─ vite.config.ts
       └─ dist/gui-experimental.cjs    # 构建产物，桌面端直接加载
 ```
@@ -68,20 +68,28 @@ git checkout -b my-features
 git fetch upstream && git rebase upstream/dev
 ```
 
-## 桌面插件：项目快捷入口（opencodeex）
+## 桌面插件：左侧常驻项目栏（opencodeex）
 
-`plugins/opencodeex` 是一个 OpenCode Desktop GUI 插件，用来在桌面端快速打开任意项目。
+`plugins/opencodeex` 是一个 OpenCode Desktop GUI 插件，在窗口左侧常驻显示所有项目。
 
-打开方式：
+效果：
+
+- 左侧固定一列项目列表，样式与 OpenCode 原生项目列表一致（图标徽标 + 名称 + 选中高亮）
+- 主内容区自动右移 320px 让位，不遮挡聊天
+- 点击项目 → 在该项目目录下新建一个空白会话
+- 标题栏「+」→ 打开目录选择器添加项目
+- 标题栏「⟳」刷新、「‹」收起
+
+切换显示：
 
 | 入口 | 位置 |
 | --- | --- |
-| 标题栏胶囊按钮「项目」 | 窗口标题栏 / 标签栏底部，始终可见 |
-| 命令面板「切换项目」 | `Ctrl+P` 里搜索「项目」 |
+| 标题栏胶囊按钮「项目」 | 窗口标题栏，按下态表示当前可见 |
+| 命令面板「显示/隐藏项目栏」 | `Ctrl+P` 搜索 |
 | 快捷键 | `Ctrl+Alt+P` |
-| 左侧项目菜单「所有项目」 | 点开左上角项目名后的菜单 |
+| 左侧项目菜单「项目」 | 点开左上角项目名后的菜单 |
 
-点击后弹出项目列表，显示每个项目的名称和路径；点击任意一项会在该项目目录下新建一个空白会话。
+显隐状态记在 `localStorage`，重启后保持。
 
 ### 注册方式
 
@@ -103,8 +111,8 @@ GUI 插件必须写在**全局**配置里，桌面端才会在所有窗口加载
 
 ```bash
 cd plugins/opencodeex
-npm install          # 首次
-npx vite build       # 产出 dist/gui-experimental.cjs
+npm install              # 首次
+npx vite build           # 产出 dist/gui-experimental.cjs
 npx vite build --watch   # 开发时自动重建，窗口会热重载
 ```
 
@@ -113,7 +121,7 @@ npx vite build --watch   # 开发时自动重建，窗口会热重载
 ### 说明
 
 - GUI 插件 API 目前是实验性的（导出名 `./gui-experimental`），桌面端大版本升级后可能需要跟进调整。
-- OpenCode 的 GUI SDK 没有开放「左侧边栏常驻按钮」插槽，所以主入口放在标题栏胶囊 + 左侧项目菜单里。
+- 左侧栏通过独立挂载到 `document.body` 实现，并给 `main` 加 `padding-left` 让位；如果 OpenCode 大改布局，这部分 CSS 可能需要跟着调整。
 - 插件 id 是 `opencodeex`（项目文件夹名的小写形式），界面显示名是 `OpenCodeEX`。
 
 ## 插件开发
