@@ -1,0 +1,23 @@
+{
+  "name": "opencodeex",
+  "version": "0.1.0",
+  "description": "OpenCodeEX 桌面扩展：左侧项目快捷入口",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./index.ts",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "files": [
+    "index.ts",
+    "dist"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "^2.2.0"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}

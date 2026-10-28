@@ -11,18 +11,24 @@
 OpenCodeEX/
 ├─ opencode.jsonc                     # 项目配置（模型、插件、权限等）
 ├─ .gitattributes                     # 统一换行符，避免 Windows 下 diff 噪音
-└─ .opencode/
-   ├─ agents/
-   │  └─ reviewer.md                  # 只读代码审查 subagent
-   ├─ commands/
-   │  └─ standup.md                   # /standup 站会汇报
-   ├─ skills/
-   │  └─ opencode-customize/
-   │     └─ SKILL.md                  # 教 agent 如何安全扩展 OpenCode
-   └─ plugins/
-      └─ opencode-ex/
-         ├─ package.json
-         └─ index.ts                  # 自定义工具：note_save / note_list
+├─ .opencode/
+│  ├─ agents/
+│  │  └─ reviewer.md                  # 只读代码审查 subagent
+│  ├─ commands/
+│  │  └─ standup.md                   # /standup 站会汇报
+│  ├─ skills/
+│  │  └─ opencode-customize/
+│  │     └─ SKILL.md                  # 教 agent 如何安全扩展 OpenCode
+│  └─ plugins/
+│     └─ opencode-ex/
+│        ├─ package.json
+│        └─ index.ts                  # 自定义工具：note_save / note_list
+└─ plugins/
+   └─ opencodeex/                     # 桌面 GUI 插件：项目快捷入口
+      ├─ index.ts                     # 服务端部分（声明 id）
+      ├─ gui.tsx                      # 窗口部分（按钮 / 命令 / 对话框）
+      ├─ vite.config.ts
+      └─ dist/gui-experimental.cjs    # 构建产物，桌面端直接加载
 ```
 
 `.opencode/` 下的 agents、commands、skills、plugins 都会被自动发现，不需要在配置里逐个注册。
@@ -62,9 +68,57 @@ git checkout -b my-features
 git fetch upstream && git rebase upstream/dev
 ```
 
+## 桌面插件：项目快捷入口（opencodeex）
+
+`plugins/opencodeex` 是一个 OpenCode Desktop GUI 插件，用来在桌面端快速打开任意项目。
+
+打开方式：
+
+| 入口 | 位置 |
+| --- | --- |
+| 标题栏胶囊按钮「项目」 | 窗口标题栏 / 标签栏底部，始终可见 |
+| 命令面板「切换项目」 | `Ctrl+P` 里搜索「项目」 |
+| 快捷键 | `Ctrl+Alt+P` |
+| 左侧项目菜单「所有项目」 | 点开左上角项目名后的菜单 |
+
+点击后弹出项目列表，显示每个项目的名称和路径；点击任意一项会在该项目目录下新建一个空白会话。
+
+### 注册方式
+
+GUI 插件必须写在**全局**配置里，桌面端才会在所有窗口加载：
+
+`C:\Users\19142\.config\opencode\opencode.json`
+
+```jsonc
+{
+  "plugins": [
+    { "package": "file:///E:/WK/OpenCode/OpenCodeEX/plugins/opencodeex" }
+  ]
+}
+```
+
+> 这里用的是绝对路径。如果移动了 `OpenCodeEX` 目录，要同步改这一行。
+
+### 修改与构建
+
+```bash
+cd plugins/opencodeex
+npm install          # 首次
+npx vite build       # 产出 dist/gui-experimental.cjs
+npx vite build --watch   # 开发时自动重建，窗口会热重载
+```
+
+`dist/gui-experimental.cjs` 已提交到仓库，因为桌面端直接从磁盘加载它。
+
+### 说明
+
+- GUI 插件 API 目前是实验性的（导出名 `./gui-experimental`），桌面端大版本升级后可能需要跟进调整。
+- OpenCode 的 GUI SDK 没有开放「左侧边栏常驻按钮」插槽，所以主入口放在标题栏胶囊 + 左侧项目菜单里。
+- 插件 id 是 `opencodeex`（项目文件夹名的小写形式），界面显示名是 `OpenCodeEX`。
+
 ## 插件开发
 
-当前插件 `opencode-ex` 演示了两件事：
+当前 `.opencode/plugins/opencode-ex` 演示了两件事：
 
 1. **注册工具**：`ctx.tool.transform(editor => editor.add({...}))`
 2. **持久化存储**：`ctx.storage.set/get/scan`
