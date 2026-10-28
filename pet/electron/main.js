@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, screen } = require("electron")
+const { app, BrowserWindow, ipcMain, screen } = require("electron")
 const { execFile } = require("child_process")
 const path = require("path")
 const fs = require("fs")
@@ -109,14 +109,21 @@ ipcMain.on("pet:zones", (_event, next) => {
   zones = Array.isArray(next) ? next : []
 })
 
-ipcMain.on("pet:drag-start", (_event, offset) => {
-  if (!offset || typeof offset.x !== "number" || typeof offset.y !== "number") return
-  dragOffset = offset
+ipcMain.on("pet:drag-start", () => {
+  const scale = screen.getPrimaryDisplay().scaleFactor || 1
+  let last = screen.getCursorScreenPoint()
+  last = { x: last.x / scale, y: last.y / scale }
   if (dragTimer) clearInterval(dragTimer)
   dragTimer = setInterval(() => {
     if (!win || win.isDestroyed()) return
     const point = screen.getCursorScreenPoint()
-    win.setPosition(Math.round(point.x - dragOffset.x), Math.round(point.y - dragOffset.y))
+    const current = { x: point.x / scale, y: point.y / scale }
+    const [wx, wy] = win.getPosition()
+    win.setPosition(
+      Math.round(wx + current.x - last.x),
+      Math.round(wy + current.y - last.y),
+    )
+    last = current
   }, 16)
 })
 
@@ -180,7 +187,9 @@ function startHitTest() {
     )
     if (inside !== lastInside) {
       lastInside = inside
-      win.setIgnoreMouseEvents(!inside, { forward: true })
+      try { fs.appendFileSync(path.join(__dirname, "pet.log"), `[hit] ${inside}\n`) } catch {}
+      if (inside) win.setIgnoreMouseEvents(false)
+      else win.setIgnoreMouseEvents(true, { forward: true })
     }
   }, 60)
 }
@@ -189,10 +198,10 @@ function createWindow() {
   const display = screen.getPrimaryDisplay()
   const scale = display.scaleFactor || 1
   const area = display.workArea
-  const width = 400
-  const height = 560
-  const x = Math.round((area.x + area.width) / scale - 424)
-  const y = Math.round((area.y + area.height) / scale - 600)
+  const width = 300
+  const height = 520
+  const x = Math.round((area.x + area.width) / scale - 324)
+  const y = Math.round((area.y + area.height) / scale - 580)
 
   win = new BrowserWindow({
     width,
@@ -214,7 +223,7 @@ function createWindow() {
   })
 
   win.setAlwaysOnTop(true, "screen-saver")
-  win.setIgnoreMouseEvents(true, { forward: true })
+  win.setIgnoreMouseEvents(false)
   win.setBounds({ x, y, width, height })
   win.loadFile(path.join(__dirname, "dist", "index.html"))
 
@@ -236,8 +245,9 @@ function createWindow() {
   }, 3000)
 
   win.on("closed", () => (win = null))
-  startHitTest()
+  // startHitTest()
 }
 
 app.whenReady().then(createWindow)
 app.on("window-all-closed", () => app.quit())
+
