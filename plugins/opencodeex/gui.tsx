@@ -45,6 +45,10 @@ body.opencodeex-docked main{padding-left:var(--opencodeex-width,320px);box-sizin
 .opencodeex-context{position:fixed;z-index:91;min-width:190px;padding:4px;border-radius:8px;background:var(--v2-background-bg-base,#1f1f1f);border:1px solid rgba(127,127,127,.25);box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .opencodeex-context-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:13px;text-align:left;cursor:pointer}
 .opencodeex-context-item:hover{background:rgba(127,127,127,.18)}
+.opencodeex-context-path{max-width:280px;padding:6px 10px 4px;font-size:11px;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#opencodeex-menu{position:fixed;inset:0;z-index:9998;pointer-events:none}
+#opencodeex-menu .opencodeex-backdrop{pointer-events:auto}
+#opencodeex-menu .opencodeex-context{pointer-events:auto}
 `
 
 /**
@@ -186,6 +190,99 @@ export default Plugin.define({
 
     const copyPath = async (project: ProjectInfo) => {
       await ctx.system.copy(project.canonical)
+    }
+
+    const isAbsolutePath = (value: string) =>
+      /^[a-zA-Z]:[\\/]/.test(value) ||
+      /^\\\\/.test(value) ||
+      (value.startsWith("/") && value.length > 1 && !value.startsWith("//"))
+
+    const cleanToken = (value: string) => value.replace(/^[("'`<\[]+/, "").replace(/[)"'`>\],.;:]+$/, "")
+
+    const pathFromHref = (href: string | null): string | undefined => {
+      if (!href) return undefined
+      if (href.startsWith("file://")) {
+        try {
+          let path = decodeURIComponent(href.slice("file://".length))
+          if (/^\/[a-zA-Z]:/.test(path)) path = path.slice(1)
+          path = path.replace(/\//g, "\\")
+          return isAbsolutePath(path) ? path : undefined
+        } catch {
+          return undefined
+        }
+      }
+      return isAbsolutePath(href) ? href : undefined
+    }
+
+    const pathAtPoint = (event: MouseEvent): string | undefined => {
+      const selection = window.getSelection()?.toString().trim()
+      if (selection) {
+        const candidate = cleanToken(selection)
+        if (isAbsolutePath(candidate)) return candidate
+      }
+
+      const doc = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }
+      const range = doc.caretRangeFromPoint?.(event.clientX, event.clientY)
+      const node = range?.startContainer
+      if (!node || node.nodeType !== Node.TEXT_NODE) return undefined
+
+      const text = node.textContent ?? ""
+      const offset = range?.startOffset ?? 0
+      const isSeparator = (char: string) => /[\s"'`<>|]/.test(char)
+      let start = offset
+      let end = offset
+      while (start > 0 && !isSeparator(text[start - 1])) start--
+      while (end < text.length && !isSeparator(text[end])) end++
+
+      const candidate = cleanToken(text.slice(start, end))
+      return isAbsolutePath(candidate) ? candidate : undefined
+    }
+
+    const resolvePathAt = (event: MouseEvent): string | undefined => {
+      const target = event.target
+      if (target instanceof Element) {
+        const fromHref = pathFromHref(target.closest("a")?.getAttribute("href") ?? null)
+        if (fromHref) return fromHref
+      }
+      return pathAtPoint(event)
+    }
+
+    const folderOf = (path: string) => {
+      const normalized = path.replace(/[\\/]+$/, "")
+      const name = normalized.split(/[\\/]/).pop() ?? ""
+      if (!/\.[a-zA-Z0-9]{1,10}$/.test(name)) return normalized
+      const index = Math.max(normalized.lastIndexOf("\\"), normalized.lastIndexOf("/"))
+      return index > 0 ? normalized.slice(0, index) : normalized
+    }
+
+    const openPathFolder = async (path: string) => {
+      const folder = folderOf(path)
+      if (ctx.desktop) await ctx.desktop.launch(folder)
+      else await ctx.system.copy(folder)
+    }
+
+    const revealPath = async (path: string) => {
+      if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+      await ctx.system.copy(path)
+    }
+
+    const [fileMenu, setFileMenu] = createSignal<{ x: number; y: number; path: string } | null>(null)
+
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest("#opencodeex-dock, #opencodeex-peek, #opencodeex-menu")) return
+
+      const path = resolvePathAt(event)
+      if (!path) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      setFileMenu({
+        x: Math.min(event.clientX, window.innerWidth - 250),
+        y: Math.min(event.clientY, window.innerHeight - 170),
+        path,
+      })
     }
 
     function ProjectList() {
@@ -453,6 +550,66 @@ export default Plugin.define({
       peek,
     )
 
+    const fileMenuHost = document.createElement("div")
+    fileMenuHost.id = "opencodeex-menu"
+    const disposeFileMenu = render(
+      () => (
+        <Show when={fileMenu()}>
+          {(current) => (
+            <>
+              <div
+                class="opencodeex-backdrop"
+                onMouseDown={() => setFileMenu(null)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setFileMenu(null)
+                }}
+              />
+              <div class="opencodeex-context" style={{ left: `${current().x}px`, top: `${current().y}px` }}>
+                <div class="opencodeex-context-path" title={current().path}>
+                  {current().path}
+                </div>
+                <button
+                  type="button"
+                  class="opencodeex-context-item"
+                  onClick={() => {
+                    void openPathFolder(current().path)
+                    setFileMenu(null)
+                  }}
+                >
+                  <ui.Icon name="folder" size="small" />
+                  <span>{ctx.t("openFolder")}</span>
+                </button>
+                <button
+                  type="button"
+                  class="opencodeex-context-item"
+                  onClick={() => {
+                    void revealPath(current().path)
+                    setFileMenu(null)
+                  }}
+                >
+                  <ui.Icon name="select-element" size="small" />
+                  <span>{ctx.t("revealFolder")}</span>
+                </button>
+                <button
+                  type="button"
+                  class="opencodeex-context-item"
+                  onClick={() => {
+                    void ctx.system.copy(current().path)
+                    setFileMenu(null)
+                  }}
+                >
+                  <ui.Icon name="copy" size="small" />
+                  <span>{ctx.t("copyPath")}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </Show>
+      ),
+      fileMenuHost,
+    )
+
     const place = () => {
       const main = document.querySelector("main")
       host.style.top = `${main ? Math.round(main.getBoundingClientRect().top) : 44}px`
@@ -467,12 +624,19 @@ export default Plugin.define({
       if (shown) place()
     }
 
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFileMenu(null)
+    }
+
     onMount(() => {
       applyWidth(width())
       document.body.appendChild(host)
       document.body.appendChild(peek)
+      document.body.appendChild(fileMenuHost)
       apply()
       window.addEventListener("resize", place)
+      document.addEventListener("contextmenu", onContextMenu, true)
+      document.addEventListener("keydown", onEscape)
     })
 
     createEffect(() => applyWidth(width()))
@@ -493,12 +657,16 @@ export default Plugin.define({
 
     onCleanup(() => {
       window.removeEventListener("resize", place)
+      document.removeEventListener("contextmenu", onContextMenu, true)
+      document.removeEventListener("keydown", onEscape)
       document.body.classList.remove("opencodeex-docked")
       document.body.style.removeProperty("--opencodeex-width")
       dispose()
       disposePeek()
+      disposeFileMenu()
       host.remove()
       peek.remove()
+      fileMenuHost.remove()
     })
 
     const toggle = () => setOpen((v) => !v)
