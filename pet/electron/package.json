@@ -1,0 +1,19 @@
+{
+  "name": "opencode-pet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenCode 桌面宠物（Electron + three-vrm）",
+  "main": "main.js",
+  "scripts": {
+    "build": "vite build",
+    "start": "npm run build && electron ."
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.4.0",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "vite": "^7.0.0"
+  }
+}

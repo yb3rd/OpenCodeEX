@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenCode Pet</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="drag" title="拖动移动窗口">⠿</div>
+    <div class="bubble-area">
+      <div id="bubble" class="bubble hidden"></div>
+    </div>
+    <canvas id="view"></canvas>
+    <div class="controls">
+      <button id="mute" title="静音 / 开启朗读">🔊</button>
+      <button id="test" title="朗读测试">📢</button>
+      <button id="dance" title="跳舞">💃</button>
+      <button id="quit" title="退出">×</button>
+    </div>
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

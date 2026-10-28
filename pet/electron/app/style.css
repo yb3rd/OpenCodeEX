@@ -1,0 +1,85 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.drag {
+  -webkit-app-region: drag;
+  width: 100%;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: grab;
+}
+
+.bubble-area {
+  width: 100%;
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.bubble {
+  max-width: 340px;
+  max-height: 140px;
+  overflow: auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(22, 24, 29, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f0f4ff;
+  font: 12px/1.55 "Microsoft YaHei", system-ui, sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.bubble.hidden {
+  display: none;
+}
+
+#view {
+  width: 360px;
+  height: 320px;
+  display: block;
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.controls button {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(22, 24, 29, 0.85);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: rgba(60, 70, 90, 0.9);
+}
