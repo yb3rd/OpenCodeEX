@@ -1,6 +1,9 @@
-import { Command, Plugin, Slot, Style, TitlebarItem } from "@opencode/plugin/gui"
+import { Command, createKeyed, Plugin, Slot, Style, TitlebarItem } from "@opencode/plugin/gui"
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
+import * as THREE from "three"
+
+type Pose = "idle" | "talk" | "wave" | "dance" | "turn"
 
 interface ProjectInfo {
   id: string
@@ -13,6 +16,8 @@ const DOCK_WIDTH = 320
 const STORAGE_KEY = "opencodeex.dock.open"
 const WIDTH_KEY = "opencodeex.width"
 const HIDDEN_KEY = "opencodeex.hidden"
+const VOICE_KEY = "opencodeex.voice"
+const AVATAR_KEY = "opencodeex.avatar"
 
 const basename = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path
 
@@ -49,6 +54,13 @@ body.opencodeex-docked main{padding-left:var(--opencodeex-width,320px);box-sizin
 #opencodeex-menu{position:fixed;inset:0;z-index:9998;pointer-events:none}
 #opencodeex-menu .opencodeex-backdrop{pointer-events:auto}
 #opencodeex-menu .opencodeex-context{pointer-events:auto}
+#opencodeex-avatar{position:fixed;right:24px;bottom:24px;z-index:9990;width:220px;pointer-events:none;display:flex;flex-direction:column;align-items:stretch}
+.opencodeex-avatar-card{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:6px;width:220px}
+.opencodeex-avatar-canvas{width:200px;height:220px;display:block;cursor:pointer}
+.opencodeex-bubble{max-width:220px;max-height:130px;overflow:auto;padding:8px 10px;border-radius:10px;background:var(--v2-background-bg-base,#1b1b1b);border:1px solid rgba(127,127,127,.25);font-size:12px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.opencodeex-avatar-actions{display:flex;gap:4px}
+.opencodeex-avatar-btn{width:26px;height:26px;border-radius:7px;border:1px solid rgba(127,127,127,.25);background:var(--v2-background-bg-base,#1b1b1b);color:inherit;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.opencodeex-avatar-btn:hover{background:rgba(127,127,127,.18)}
 `
 
 /**
@@ -77,6 +89,11 @@ export default Plugin.define({
       openFolder: "Open folder",
       revealFolder: "Reveal in Explorer",
       copyPath: "Copy path",
+      mute: "Mute",
+      unmute: "Unmute",
+      dance: "Dance",
+      hideAvatar: "Hide assistant",
+      avatarCommand: "Toggle assistant",
       allHidden: "All projects are hidden",
       current: "Current project",
     },
@@ -98,6 +115,11 @@ export default Plugin.define({
       openFolder: "打开文件夹",
       revealFolder: "在资源管理器中定位",
       copyPath: "复制路径",
+      mute: "静音",
+      unmute: "开启朗读",
+      dance: "跳个舞",
+      hideAvatar: "隐藏助手",
+      avatarCommand: "显示/隐藏助手",
       allHidden: "项目都已隐藏",
       current: "当前项目",
     },
@@ -610,9 +632,310 @@ export default Plugin.define({
       fileMenuHost,
     )
 
+    // ---- 3D 助手 ----
+    const [bubble, setBubble] = createSignal("")
+    const [voiceOn, setVoiceOn] = createSignal(localStorage.getItem(VOICE_KEY) !== "0")
+    const [avatarOn, setAvatarOn] = createSignal(localStorage.getItem(AVATAR_KEY) !== "0")
+
+    let playAction: ((pose: Pose) => void) | undefined
+
+    const toSpeech = (text: string) =>
+      text
+        .replace(/```[\s\S]*?```/g, "，代码块，")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/^#{1,6}\s*/gm, "")
+        .replace(/[*_>~|]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    const speak = (text: string) => {
+      if (!("speechSynthesis" in window)) return
+      speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text.slice(0, 400))
+      utterance.lang = "zh-CN"
+      utterance.rate = 1.05
+      utterance.pitch = 1.1
+      const voices = speechSynthesis.getVoices()
+      const voice =
+        voices.find((item) => item.lang.toLowerCase().startsWith("zh")) ?? voices.find((item) => item.default)
+      if (voice) utterance.voice = voice
+      utterance.onstart = () => playAction?.("talk")
+      speechSynthesis.speak(utterance)
+    }
+
+    const showText = (text: string) => {
+      const plain = toSpeech(text)
+      setBubble(plain.length > 240 ? `${plain.slice(0, 240)}…` : plain)
+      playAction?.("talk")
+      if (voiceOn()) speak(plain)
+    }
+
+    let lastSpoken = ""
+    const readLatest = async () => {
+      const session = ctx.sessions.current()
+      if (!session) return
+      try {
+        const messages = (await ctx.client.session.context({ sessionID: session.id })) as unknown as Array<{
+          id: string
+          type: string
+          content?: Array<{ type: string; text?: string }>
+        }>
+        const last = [...messages]
+          .reverse()
+          .find(
+            (message) =>
+              message.type === "assistant" &&
+              message.content?.some((part) => part.type === "text" && part.text?.trim()),
+          )
+        if (!last || last.id === lastSpoken) return
+        const text = (last.content ?? [])
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n")
+          .trim()
+        if (!text) return
+        lastSpoken = last.id
+        showText(text)
+      } catch (error) {
+        console.error("[opencodeex] avatar read failed", error)
+      }
+    }
+
+    createKeyed(
+      () => ctx.servers.get(builtinServer())?.data,
+      (data) => onCleanup(data.on("session.idle", () => void readLatest())),
+    )
+
+    const randomPose = (): Pose => {
+      const poses: Pose[] = ["dance", "wave", "turn"]
+      return poses[Math.floor(Math.random() * poses.length)]
+    }
+
+    const toggleVoice = () => {
+      const next = !voiceOn()
+      setVoiceOn(next)
+      localStorage.setItem(VOICE_KEY, next ? "1" : "0")
+      if (!next && "speechSynthesis" in window) speechSynthesis.cancel()
+    }
+
+    function Avatar() {
+      let canvas!: HTMLCanvasElement
+      let raf = 0
+      let renderer: THREE.WebGLRenderer | undefined
+
+      onMount(() => {
+        const width = canvas.clientWidth || 200
+        const height = canvas.clientHeight || 220
+
+        renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        renderer.setSize(width, height, false)
+
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(32, width / height, 0.1, 20)
+        camera.position.set(0, 1.35, 3.4)
+        camera.lookAt(0, 1.0, 0)
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2))
+        const key = new THREE.DirectionalLight(0xffffff, 1.7)
+        key.position.set(2, 4, 3)
+        scene.add(key)
+        const rim = new THREE.DirectionalLight(0x7aa2ff, 0.9)
+        rim.position.set(-3, 2, -2)
+        scene.add(rim)
+
+        const material = (color: number) =>
+          new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.08 })
+
+        const group = new THREE.Group()
+        scene.add(group)
+
+        const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.45, 8, 20), material(0x6ea8fe))
+        torso.position.y = 0.72
+        group.add(torso)
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 24), material(0xf2f6ff))
+        head.position.y = 1.32
+        group.add(head)
+
+        const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x1b2440, roughness: 0.2 })
+        for (const x of [-0.11, 0.11]) {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), eyeMaterial)
+          eye.position.set(x, 1.36, 0.26)
+          group.add(eye)
+        }
+
+        const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.18), material(0x9db8ff))
+        antenna.position.y = 1.66
+        group.add(antenna)
+        const bulb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.05, 16, 12),
+          new THREE.MeshStandardMaterial({ color: 0xffb02e, emissive: 0xff8800, emissiveIntensity: 0.8 }),
+        )
+        bulb.position.y = 1.77
+        group.add(bulb)
+
+        const armGeometry = new THREE.CapsuleGeometry(0.08, 0.38, 6, 12)
+        const armMaterial = material(0x5b93f0)
+
+        const shoulderL = new THREE.Group()
+        shoulderL.position.set(-0.36, 1.02, 0)
+        const armL = new THREE.Mesh(armGeometry, armMaterial)
+        armL.position.y = -0.24
+        shoulderL.add(armL)
+        group.add(shoulderL)
+
+        const shoulderR = new THREE.Group()
+        shoulderR.position.set(0.36, 1.02, 0)
+        const armR = new THREE.Mesh(armGeometry, armMaterial)
+        armR.position.y = -0.24
+        shoulderR.add(armR)
+        group.add(shoulderR)
+
+        const legGeometry = new THREE.CapsuleGeometry(0.09, 0.3, 6, 12)
+        const legMaterial = material(0x3f6bd6)
+        for (const x of [-0.14, 0.14]) {
+          const leg = new THREE.Mesh(legGeometry, legMaterial)
+          leg.position.set(x, 0.18, 0)
+          group.add(leg)
+        }
+
+        let pose: Pose = "idle"
+        let started = performance.now()
+        const durations: Record<Pose, number> = {
+          idle: Number.POSITIVE_INFINITY,
+          talk: 3,
+          wave: 2.2,
+          dance: 4.5,
+          turn: 1.4,
+        }
+
+        playAction = (next) => {
+          pose = next
+          started = performance.now()
+        }
+
+        const clock = new THREE.Clock()
+        const loop = () => {
+          const t = clock.getElapsedTime()
+          const elapsed = (performance.now() - started) / 1000
+          if (elapsed > durations[pose]) {
+            pose = "idle"
+            started = performance.now()
+          }
+
+          group.position.y = Math.sin(t * 2) * 0.02
+          group.rotation.y *= 0.92
+          head.rotation.set(0, 0, 0)
+          shoulderL.rotation.set(0, 0, 0.14 + Math.sin(t * 2) * 0.05)
+          shoulderR.rotation.set(0, 0, -0.14 - Math.sin(t * 2) * 0.05)
+
+          if (pose === "wave") {
+            shoulderR.rotation.z = -2.3 + Math.sin(elapsed * 9) * 0.35
+          } else if (pose === "dance") {
+            group.rotation.y = Math.sin(elapsed * 3.2) * 0.8
+            group.position.y = Math.abs(Math.sin(elapsed * 6.4)) * 0.18
+            shoulderL.rotation.z = 0.9 + Math.sin(elapsed * 6.4) * 0.9
+            shoulderR.rotation.z = -0.9 - Math.sin(elapsed * 6.4) * 0.9
+            head.rotation.z = Math.sin(elapsed * 3.2) * 0.12
+          } else if (pose === "turn") {
+            group.rotation.y = elapsed * Math.PI * 2
+          } else if (pose === "talk") {
+            head.rotation.x = Math.sin(elapsed * 7) * 0.08
+            shoulderR.rotation.z = -0.55 + Math.sin(elapsed * 3.2) * 0.25
+          }
+
+          renderer?.render(scene, camera)
+          raf = requestAnimationFrame(loop)
+        }
+        loop()
+
+        const observer = new ResizeObserver(() => {
+          const w = canvas.clientWidth || width
+          const h = canvas.clientHeight || height
+          renderer?.setSize(w, h, false)
+          camera.aspect = w / h
+          camera.updateProjectionMatrix()
+        })
+        observer.observe(canvas)
+
+        onCleanup(() => {
+          observer.disconnect()
+          cancelAnimationFrame(raf)
+          renderer?.dispose()
+          playAction = undefined
+        })
+      })
+
+      return (
+        <canvas
+          ref={canvas}
+          class="opencodeex-avatar-canvas"
+          onClick={() => {
+            if ("speechSynthesis" in window) speechSynthesis.resume()
+            playAction?.(randomPose())
+          }}
+        />
+      )
+    }
+
+    const avatarHost = document.createElement("div")
+    avatarHost.id = "opencodeex-avatar"
+    const disposeAvatar = render(
+      () => (
+        <div class="opencodeex-avatar-card" style={{ display: avatarOn() ? "flex" : "none" }}>
+          <Show when={bubble()}>
+            <div class="opencodeex-bubble">{bubble()}</div>
+          </Show>
+          <Avatar />
+          <div class="opencodeex-avatar-actions">
+            <button
+              type="button"
+              class="opencodeex-avatar-btn"
+              title={voiceOn() ? ctx.t("mute") : ctx.t("unmute")}
+              onClick={toggleVoice}
+            >
+              {voiceOn() ? "🔊" : "🔇"}
+            </button>
+            <button
+              type="button"
+              class="opencodeex-avatar-btn"
+              title={ctx.t("dance")}
+              onClick={() => playAction?.("dance")}
+            >
+              💃
+            </button>
+            <button
+              type="button"
+              class="opencodeex-avatar-btn"
+              title={ctx.t("hideAvatar")}
+              onClick={() => setAvatarOn(false)}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ),
+      avatarHost,
+    )
+
+    createEffect(() => localStorage.setItem(AVATAR_KEY, avatarOn() ? "1" : "0"))
+
     const place = () => {
       const main = document.querySelector("main")
       host.style.top = `${main ? Math.round(main.getBoundingClientRect().top) : 44}px`
+
+      // 窗口可能比屏幕大（右/下超出），把助手拉回可见区域
+      const dpr = window.devicePixelRatio || 1
+      const screen = window.screen
+      const availW = screen.width > window.innerWidth * 1.1 ? screen.width / dpr : screen.width
+      const availH = screen.height > window.innerHeight * 1.1 ? screen.height / dpr : screen.height
+      const visibleW = Math.max(0, Math.min(window.innerWidth, availW - window.screenX))
+      const visibleH = Math.max(0, Math.min(window.innerHeight, availH - window.screenY))
+      avatarHost.style.right = `${24 + Math.max(0, window.innerWidth - visibleW)}px`
+      avatarHost.style.bottom = `${24 + Math.max(0, window.innerHeight - visibleH)}px`
     }
 
     const apply = () => {
@@ -633,7 +956,9 @@ export default Plugin.define({
       document.body.appendChild(host)
       document.body.appendChild(peek)
       document.body.appendChild(fileMenuHost)
+      document.documentElement.appendChild(avatarHost)
       apply()
+      place()
       window.addEventListener("resize", place)
       document.addEventListener("contextmenu", onContextMenu, true)
       document.addEventListener("keydown", onEscape)
@@ -664,9 +989,11 @@ export default Plugin.define({
       dispose()
       disposePeek()
       disposeFileMenu()
+      disposeAvatar()
       host.remove()
       peek.remove()
       fileMenuHost.remove()
+      avatarHost.remove()
     })
 
     const toggle = () => setOpen((v) => !v)
