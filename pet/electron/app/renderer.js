@@ -641,8 +641,3 @@ function animate() {
 }
 
 animate()
-
-setTimeout(() => {
-  console.log(`voiceOn=${voiceOn}`)
-  document.getElementById("view").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
-}, 3500)
