@@ -11,13 +11,19 @@ interface ProjectInfo {
 
 const DOCK_WIDTH = 320
 const STORAGE_KEY = "opencodeex.dock.open"
+const WIDTH_KEY = "opencodeex.width"
 const HIDDEN_KEY = "opencodeex.hidden"
 
 const basename = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path
 
 const css = `
-#opencodeex-dock{position:fixed;left:0;bottom:0;width:${DOCK_WIDTH}px;z-index:60;display:flex;flex-direction:column;box-sizing:border-box;background:var(--v2-background-bg-base,#171717);border-right:1px solid var(--v2-border-border-base,rgba(127,127,127,.22))}
-body.opencodeex-docked main{padding-left:${DOCK_WIDTH}px;box-sizing:border-box}
+#opencodeex-dock{position:fixed;left:0;bottom:0;width:var(--opencodeex-width,320px);z-index:60;display:flex;flex-direction:column;box-sizing:border-box;background:var(--v2-background-bg-base,#171717);border-right:1px solid var(--v2-border-border-base,rgba(127,127,127,.22))}
+body.opencodeex-docked main{padding-left:var(--opencodeex-width,320px);box-sizing:border-box}
+#opencodeex-peek{position:fixed;left:0;top:45%;z-index:60;display:none}
+.opencodeex-peek{display:flex;align-items:center;justify-content:center;width:18px;height:52px;padding:0;border:1px solid rgba(127,127,127,.25);border-left:0;border-radius:0 8px 8px 0;background:var(--v2-background-bg-base,#171717);color:inherit;cursor:pointer;opacity:.7}
+.opencodeex-peek:hover{opacity:1}
+.opencodeex-resize{position:absolute;top:0;right:-3px;bottom:0;width:6px;cursor:col-resize;z-index:2}
+.opencodeex-resize:hover{background:rgba(127,127,127,.28)}
 .opencodeex-panel{display:flex;flex-direction:column;gap:6px;height:100%;box-sizing:border-box;padding:10px 8px}
 .opencodeex-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 4px}
 .opencodeex-title{font-size:14px;font-weight:600;line-height:1.2}
@@ -59,6 +65,8 @@ export default Plugin.define({
       retry: "Retry",
       refresh: "Refresh",
       collapse: "Collapse",
+      expand: "Expand",
+      resize: "Drag to resize, double-click to reset",
       add: "Add project",
       hidden: "Hidden projects",
       hide: "Hide",
@@ -78,6 +86,8 @@ export default Plugin.define({
       retry: "重试",
       refresh: "刷新",
       collapse: "收起",
+      expand: "展开",
+      resize: "拖动调整宽度，双击复位",
       add: "添加项目",
       hidden: "已隐藏的项目",
       hide: "隐藏",
@@ -377,15 +387,70 @@ export default Plugin.define({
     }
 
     // 独立挂载点：不受 OpenCode 布局 contain/transform 影响
+    const readWidth = () => {
+      const value = Number(localStorage.getItem(WIDTH_KEY))
+      return Number.isFinite(value) && value >= 220 && value <= 560 ? value : DOCK_WIDTH
+    }
+
+    const [width, setWidth] = createSignal<number>(readWidth())
+
+    const applyWidth = (value: number) => {
+      document.body.style.setProperty("--opencodeex-width", `${value}px`)
+    }
+
+    let resizing = false
+    const startResize = (event: PointerEvent) => {
+      event.preventDefault()
+      resizing = true
+      ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    }
+    const moveResize = (event: PointerEvent) => {
+      if (!resizing) return
+      const next = Math.min(560, Math.max(220, event.clientX))
+      applyWidth(next)
+      setWidth(next)
+    }
+    const endResize = (event: PointerEvent) => {
+      if (!resizing) return
+      resizing = false
+      localStorage.setItem(WIDTH_KEY, String(width()))
+      ;(event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId)
+    }
+    const resetWidth = () => {
+      applyWidth(DOCK_WIDTH)
+      setWidth(DOCK_WIDTH)
+      localStorage.setItem(WIDTH_KEY, String(DOCK_WIDTH))
+    }
+
     const host = document.createElement("div")
     host.id = "opencodeex-dock"
     const dispose = render(
       () => (
         <div class="opencodeex-panel">
           <ProjectList />
+          <div
+            class="opencodeex-resize"
+            title={ctx.t("resize")}
+            onPointerDown={startResize}
+            onPointerMove={moveResize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+            onDblClick={resetWidth}
+          />
         </div>
       ),
       host,
+    )
+
+    const peek = document.createElement("div")
+    peek.id = "opencodeex-peek"
+    const disposePeek = render(
+      () => (
+        <button type="button" class="opencodeex-peek" title={ctx.t("expand")} onClick={() => setOpen(true)}>
+          <ui.Icon name="chevron-right" size="small" />
+        </button>
+      ),
+      peek,
     )
 
     const place = () => {
@@ -396,17 +461,21 @@ export default Plugin.define({
     const apply = () => {
       const shown = open()
       host.style.display = shown ? "flex" : "none"
+      peek.style.display = shown ? "none" : "block"
       document.body.classList.toggle("opencodeex-docked", shown)
       localStorage.setItem(STORAGE_KEY, shown ? "1" : "0")
       if (shown) place()
     }
 
     onMount(() => {
+      applyWidth(width())
       document.body.appendChild(host)
+      document.body.appendChild(peek)
       apply()
       window.addEventListener("resize", place)
     })
 
+    createEffect(() => applyWidth(width()))
     createEffect(apply)
 
     /** 清理早期版本在右侧 side 区域留下的面板标签 */
@@ -425,8 +494,11 @@ export default Plugin.define({
     onCleanup(() => {
       window.removeEventListener("resize", place)
       document.body.classList.remove("opencodeex-docked")
+      document.body.style.removeProperty("--opencodeex-width")
       dispose()
+      disposePeek()
       host.remove()
+      peek.remove()
     })
 
     const toggle = () => setOpen((v) => !v)
