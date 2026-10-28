@@ -4,10 +4,15 @@ import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm"
 
 const canvas = document.getElementById("view")
 const bubble = document.getElementById("bubble")
-const muteButton = document.getElementById("mute")
-const testButton = document.getElementById("test")
-const danceButton = document.getElementById("dance")
-const quitButton = document.getElementById("quit")
+const composer = document.getElementById("composer")
+const promptInput = document.getElementById("prompt")
+const sendButton = document.getElementById("send")
+const settings = document.getElementById("settings")
+const modeSelect = document.getElementById("mode")
+const modelSelect = document.getElementById("model")
+const voiceSelect = document.getElementById("voice")
+const settingsHint = document.getElementById("settings-hint")
+const menu = document.getElementById("menu")
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -40,8 +45,8 @@ try {
   const height = size.y || 1.5
   const minY = box.min.y || 0
 
-  camera.position.set(0, minY + height * 0.82, height * 1.45)
-  camera.lookAt(0, minY + height * 0.75, 0)
+  camera.position.set(0, minY + height * 0.5, height * 2.1)
+  camera.lookAt(0, minY + height * 0.5, 0)
 
   vrm.scene.traverse((object) => {
     if (object.isMesh) object.frustumCulled = false
@@ -108,8 +113,42 @@ function showBubble(text) {
   hiddenAt = performance.now() + 20000
 }
 
-function speak(text) {
-  if (!voiceOn) return
+let voiceOn = localStorage.getItem("pet.voice.v2") !== "0"
+
+let audio = null
+
+async function speak(text, force = false) {
+  if (!voiceOn && !force) return
+  const voice = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
+  if (voice !== "system") {
+    const result = await window.pet?.speak(text, voice)
+    if (result?.ok && result.audio) {
+      try {
+        if (audio) {
+          audio.pause()
+          audio = null
+        }
+        audio = new Audio(result.audio)
+        audio.onplay = () => {
+          speaking = true
+        }
+        audio.onended = () => {
+          speaking = false
+        }
+        audio.onerror = () => {
+          speaking = false
+        }
+        await audio.play()
+        return
+      } catch {
+        speaking = false
+      }
+    }
+  }
+  speakSystem(text)
+}
+
+function speakSystem(text) {
   if (!("speechSynthesis" in window)) return
   speechSynthesis.cancel()
   speechSynthesis.resume()
@@ -131,38 +170,167 @@ function speak(text) {
   speechSynthesis.speak(utterance)
 }
 
-let voiceOn = localStorage.getItem("pet.voice.v2") !== "0"
-
-function updateMute() {
-  muteButton.textContent = voiceOn ? "🔊" : "🔇"
-}
-updateMute()
-
-muteButton.addEventListener("click", () => {
+function toggleVoice() {
   voiceOn = !voiceOn
   localStorage.setItem("pet.voice.v2", voiceOn ? "1" : "0")
   if (!voiceOn) {
     speechSynthesis.cancel()
+    audio?.pause()
     speaking = false
   }
-  updateMute()
-})
+  refreshMenu()
+}
 
-testButton.addEventListener("click", () => {
+function testVoice() {
   const text = lastText || "你好，我是 OpenCode 桌面宠物，语音测试正常。"
   showBubble(text)
   setPose("talk")
-  speak(text)
+  speak(text, true)
+}
+
+function openComposer() {
+  settings.classList.add("hidden")
+  menu.classList.add("hidden")
+  composer.classList.remove("hidden")
+  promptInput.focus()
+}
+
+async function sendPrompt() {
+  const text = promptInput.value.trim()
+  if (!text) return
+  const result = await window.pet?.prompt(text)
+  if (result?.ok) {
+    promptInput.value = ""
+    composer.classList.add("hidden")
+    showBubble("已发送，等待回复…")
+  } else {
+    showBubble(`发送失败：${result?.error || result?.status || "未知错误"}`)
+  }
+}
+
+let models = []
+const savedMode = localStorage.getItem("pet.mode") || "go"
+const savedModel = localStorage.getItem("pet.model") || ""
+modeSelect.value = savedMode
+voiceSelect.value = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
+voiceSelect.addEventListener("change", () => localStorage.setItem("pet.voiceName", voiceSelect.value))
+
+function fillModels() {
+  const mode = modeSelect.value
+  const list = models.filter((item) =>
+    mode === "go" ? item.providerID === "opencode-go" : item.providerID !== "opencode-go",
+  )
+  modelSelect.innerHTML = ""
+  for (const item of list) {
+    const option = document.createElement("option")
+    option.value = `${item.providerID}|${item.id}`
+    option.textContent = `${item.name} (${item.providerID})`
+    modelSelect.appendChild(option)
+  }
+  if (savedModel && list.some((item) => `${item.providerID}|${item.id}` === savedModel)) {
+    modelSelect.value = savedModel
+  }
+  settingsHint.textContent = list.length ? "" : "该来源没有可用模型"
+}
+
+async function openSettings() {
+  composer.classList.add("hidden")
+  menu.classList.add("hidden")
+  settings.classList.toggle("hidden")
+  if (settings.classList.contains("hidden")) return
+  if (!models.length) models = (await window.pet?.models()) || []
+  fillModels()
+}
+
+function refreshMenu() {
+  const muteItem = menu.querySelector('[data-action="mute"]')
+  if (muteItem) muteItem.textContent = voiceOn ? "🔇 静音" : "🔊 开启朗读"
+}
+
+function closeMenu() {
+  menu.classList.add("hidden")
+}
+
+window.addEventListener("contextmenu", (event) => {
+  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  event.preventDefault()
+  refreshMenu()
+  menu.classList.remove("hidden")
+  menu.style.left = `${Math.min(event.clientX, window.innerWidth - 190)}px`
+  menu.style.top = `${Math.min(event.clientY, window.innerHeight - 250)}px`
 })
 
-danceButton.addEventListener("click", () => setPose("dance"))
-quitButton.addEventListener("click", () => window.pet?.quit())
+window.addEventListener("dblclick", (event) => {
+  if (event.target.closest("input, select, textarea, button, .settings")) return
+  openComposer()
+})
+
+menu.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]")
+  if (!button) return
+  const action = button.dataset.action
+  closeMenu()
+  if (action === "compose") openComposer()
+  else if (action === "voice") testVoice()
+  else if (action === "mute") toggleVoice()
+  else if (action === "dance") setPose("dance")
+  else if (action === "settings") void openSettings()
+  else if (action === "quit") window.pet?.quit()
+})
+
+sendButton.addEventListener("click", () => void sendPrompt())
+promptInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault()
+    void sendPrompt()
+  } else if (event.key === "Escape") {
+    composer.classList.add("hidden")
+  }
+})
+
+modeSelect.addEventListener("change", () => {
+  localStorage.setItem("pet.mode", modeSelect.value)
+  fillModels()
+})
+
+modelSelect.addEventListener("change", async () => {
+  const value = modelSelect.value
+  const [providerID, id] = value.split("|")
+  if (!providerID || !id) return
+  localStorage.setItem("pet.model", value)
+  const result = await window.pet?.setModel({ providerID, id })
+  settingsHint.textContent = result?.ok ? "已切换模型" : "切换失败"
+})
 
 window.pet?.onMessage(({ text }) => {
   lastText = cleanText(text)
   showBubble(lastText)
   setPose("talk")
   speak(lastText)
+})
+
+let dragging = false
+
+window.addEventListener("mousedown", (event) => {
+  if (!menu.classList.contains("hidden") && !menu.contains(event.target)) closeMenu()
+  if (
+    !settings.classList.contains("hidden") &&
+    !settings.contains(event.target) &&
+    !menu.contains(event.target)
+  ) {
+    settings.classList.add("hidden")
+  }
+  if (event.button !== 0) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  dragging = true
+  window.pet?.dragStart({ x: event.clientX, y: event.clientY })
+  event.preventDefault()
+})
+
+window.addEventListener("mouseup", () => {
+  if (!dragging) return
+  dragging = false
+  window.pet?.dragEnd()
 })
 
 window.addEventListener("mousedown", () => {
@@ -230,3 +398,4 @@ function animate() {
 }
 
 animate()
+

@@ -11,12 +11,48 @@
       <div id="bubble" class="bubble hidden"></div>
     </div>
     <canvas id="view"></canvas>
-    <div class="controls">
-      <button id="mute" title="静音 / 开启朗读">🔊</button>
-      <button id="test" title="朗读测试">📢</button>
-      <button id="dance" title="跳舞">💃</button>
-      <button id="quit" title="退出">×</button>
+
+    <div id="composer" class="composer hidden">
+      <input id="prompt" placeholder="对 OpenCode 说点什么…（Enter 发送，Esc 关闭）" />
+      <button id="send" title="发送">➤</button>
     </div>
+
+    <div id="settings" class="settings hidden">
+      <div class="settings-title">模型设置</div>
+      <label>
+        <span>来源</span>
+        <select id="mode">
+          <option value="go">OpenCode Go</option>
+          <option value="api">API</option>
+        </select>
+      </label>
+      <label>
+        <span>模型</span>
+        <select id="model"></select>
+      </label>
+      <label>
+        <span>声音</span>
+        <select id="voice">
+          <option value="zh-CN-XiaoxiaoNeural">晓晓（女，自然）</option>
+          <option value="zh-CN-YunxiNeural">云希（男，自然）</option>
+          <option value="zh-CN-XiaoyiNeural">晓伊（女，活泼）</option>
+          <option value="zh-CN-YunyangNeural">云扬（男，新闻）</option>
+          <option value="system">系统语音（离线）</option>
+        </select>
+      </label>
+      <div id="settings-hint" class="hint"></div>
+    </div>
+
+    <div id="menu" class="context-menu hidden">
+      <button data-action="compose">💬 输入消息</button>
+      <button data-action="voice">📢 朗读上一条</button>
+      <button data-action="mute">🔇 静音</button>
+      <button data-action="dance">💃 跳舞</button>
+      <button data-action="settings">⚙ 模型设置</button>
+      <div class="sep"></div>
+      <button data-action="quit">✕ 退出</button>
+    </div>
+
     <script type="module" src="./renderer.js"></script>
   </body>
 </html>
