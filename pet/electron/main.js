@@ -77,13 +77,28 @@ ipcMain.handle("pet:chat", async (_event, payload) => {
 ipcMain.handle("pet:speak", async (_event, payload) => {
   const text = String(payload?.text || "").slice(0, 500)
   const voice = String(payload?.voice || "zh-CN-XiaoxiaoNeural")
+  const rate = String(payload?.rate || "+0%")
+  const pitch = String(payload?.pitch || "+0Hz")
   if (!text || voice === "system") return { ok: false }
   const file = path.join(os.tmpdir(), `opencode-pet-${Date.now()}.mp3`)
   try {
     await new Promise((resolve, reject) => {
       execFile(
         "python",
-        ["-m", "edge_tts", "--voice", voice, "--text", text, "--write-media", file],
+        [
+          "-m",
+          "edge_tts",
+          "--voice",
+          voice,
+          "--rate",
+          rate,
+          "--pitch",
+          pitch,
+          "--text",
+          text,
+          "--write-media",
+          file,
+        ],
         { timeout: 25000 },
         (error) => (error ? reject(error) : resolve()),
       )

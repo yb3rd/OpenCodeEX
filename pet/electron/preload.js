@@ -5,6 +5,6 @@ contextBridge.exposeInMainWorld("pet", {
   dragEnd: () => ipcRenderer.send("pet:drag-end"),
   chat: (text, history, model) => ipcRenderer.invoke("pet:chat", { text, history, model }),
   models: () => ipcRenderer.invoke("pet:models"),
-  speak: (text, voice) => ipcRenderer.invoke("pet:speak", { text, voice }),
+  speak: (text, voice, options) => ipcRenderer.invoke("pet:speak", { text, voice, ...options }),
   quit: () => ipcRenderer.send("pet:quit"),
 })

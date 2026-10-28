@@ -20,3 +20,8 @@ Thumbs.db
 
 # opencode local cache
 .opencode/cache/
+
+# never commit credentials
+service.json
+auth.json
+*.pem

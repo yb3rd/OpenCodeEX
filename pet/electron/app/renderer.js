@@ -11,6 +11,8 @@ const settings = document.getElementById("settings")
 const modeSelect = document.getElementById("mode")
 const modelSelect = document.getElementById("model")
 const voiceSelect = document.getElementById("voice")
+const rateSelect = document.getElementById("rate")
+const pitchSelect = document.getElementById("pitch")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
 
@@ -121,7 +123,9 @@ async function speak(text, force = false) {
   if (!voiceOn && !force) return
   const voice = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
   if (voice !== "system") {
-    const result = await window.pet?.speak(text, voice)
+    const rate = localStorage.getItem("pet.rate") || "+0%"
+    const pitch = localStorage.getItem("pet.pitch") || "+0Hz"
+    const result = await window.pet?.speak(text, voice, { rate, pitch })
     if (result?.ok && result.audio) {
       try {
         if (audio) {
@@ -240,6 +244,10 @@ const savedModel = localStorage.getItem("pet.model") || ""
 modeSelect.value = savedMode
 voiceSelect.value = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
 voiceSelect.addEventListener("change", () => localStorage.setItem("pet.voiceName", voiceSelect.value))
+rateSelect.value = localStorage.getItem("pet.rate") || "+0%"
+rateSelect.addEventListener("change", () => localStorage.setItem("pet.rate", rateSelect.value))
+pitchSelect.value = localStorage.getItem("pet.pitch") || "+0Hz"
+pitchSelect.addEventListener("change", () => localStorage.setItem("pet.pitch", pitchSelect.value))
 
 function fillModels() {
   const mode = modeSelect.value
@@ -369,21 +377,19 @@ function animate() {
   }
 
   if (vrm) {
-    const bob = pose === "dance" ? Math.abs(Math.sin(elapsed * 6.4)) * 0.08 : Math.sin(time * 2) * 0.012
-    vrm.scene.position.y = bob
+    vrm.scene.position.y = 0
     vrm.scene.rotation.y = 0
 
     addBoneRotation("head", 0, 0, 0)
-    addBoneRotation("rightUpperArm", 0, 0, 1.1)
-    addBoneRotation("leftUpperArm", 0, 0, -1.1)
+    addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
+    addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
 
     if (pose === "wave") {
       addBoneRotation("rightUpperArm", 0, 0, -1.5 + Math.sin(elapsed * 9) * 0.25)
     } else if (pose === "dance") {
-      vrm.scene.rotation.y = Math.sin(elapsed * 3.2) * 0.5
       addBoneRotation("rightUpperArm", 0, 0, 0.4 + Math.sin(elapsed * 6.4) * 0.7)
       addBoneRotation("leftUpperArm", 0, 0, -0.4 - Math.sin(elapsed * 6.4) * 0.7)
-      addBoneRotation("head", 0, Math.sin(elapsed * 3.2) * 0.15, 0)
+      addBoneRotation("head", 0, Math.sin(elapsed * 3.2) * 0.12, Math.sin(elapsed * 3.2) * 0.06)
     } else if (pose === "talk") {
       addBoneRotation("head", Math.sin(elapsed * 6) * 0.05, 0, 0)
       addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
