@@ -1,4 +1,4 @@
-﻿import * as THREE from "three"
+import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm"
 
@@ -195,17 +195,43 @@ function openComposer() {
   promptInput.focus()
 }
 
+let history = []
+try {
+  history = JSON.parse(localStorage.getItem("pet.history") || "[]")
+  if (!Array.isArray(history)) history = []
+} catch {
+  history = []
+}
+
+function saveHistory() {
+  localStorage.setItem("pet.history", JSON.stringify(history.slice(-20)))
+}
+
+function currentModel() {
+  const value = localStorage.getItem("pet.model") || ""
+  const [providerID, id] = value.split("|")
+  return providerID && id ? { providerID, id } : undefined
+}
+
 async function sendPrompt() {
   const text = promptInput.value.trim()
   if (!text) return
-  const result = await window.pet?.prompt(text)
-  if (result?.ok) {
-    promptInput.value = ""
-    composer.classList.add("hidden")
-    showBubble("已发送，等待回复…")
-  } else {
-    showBubble(`发送失败：${result?.error || result?.status || "未知错误"}`)
+  promptInput.value = ""
+  composer.classList.add("hidden")
+  showBubble(`你：${text}`)
+  const result = await window.pet?.chat(text, history, currentModel())
+  if (!result?.ok || !result.text) {
+    showBubble(`回复失败：${result?.error || result?.status || "未知错误"}`)
+    return
   }
+  history.push({ role: "user", content: text })
+  history.push({ role: "assistant", content: result.text })
+  history = history.slice(-20)
+  saveHistory()
+  lastText = cleanText(result.text)
+  showBubble(lastText)
+  setPose("talk")
+  speak(lastText)
 }
 
 let models = []
@@ -293,20 +319,12 @@ modeSelect.addEventListener("change", () => {
   fillModels()
 })
 
-modelSelect.addEventListener("change", async () => {
+modelSelect.addEventListener("change", () => {
   const value = modelSelect.value
   const [providerID, id] = value.split("|")
   if (!providerID || !id) return
   localStorage.setItem("pet.model", value)
-  const result = await window.pet?.setModel({ providerID, id })
-  settingsHint.textContent = result?.ok ? "已切换模型" : "切换失败"
-})
-
-window.pet?.onMessage(({ text }) => {
-  lastText = cleanText(text)
-  showBubble(lastText)
-  setPose("talk")
-  speak(lastText)
+  settingsHint.textContent = "已选择模型"
 })
 
 let dragging = false
@@ -398,4 +416,3 @@ function animate() {
 }
 
 animate()
-
