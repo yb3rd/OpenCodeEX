@@ -35,6 +35,10 @@ body.opencodeex-docked main{padding-left:${DOCK_WIDTH}px;box-sizing:border-box}
 .opencodeex-empty{padding:12px 8px;opacity:.7;font-size:13px}
 .opencodeex-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .opencodeex-menu-item:hover{background:rgba(127,127,127,.14)}
+.opencodeex-backdrop{position:fixed;inset:0;z-index:90}
+.opencodeex-context{position:fixed;z-index:91;min-width:190px;padding:4px;border-radius:8px;background:var(--v2-background-bg-base,#1f1f1f);border:1px solid rgba(127,127,127,.25);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.opencodeex-context-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.opencodeex-context-item:hover{background:rgba(127,127,127,.18)}
 `
 
 /**
@@ -58,6 +62,9 @@ export default Plugin.define({
       add: "Add project",
       hidden: "Hidden projects",
       hide: "Hide",
+      openFolder: "Open folder",
+      revealFolder: "Reveal in Explorer",
+      copyPath: "Copy path",
       allHidden: "All projects are hidden",
       current: "Current project",
     },
@@ -74,6 +81,9 @@ export default Plugin.define({
       add: "添加项目",
       hidden: "已隐藏的项目",
       hide: "隐藏",
+      openFolder: "打开文件夹",
+      revealFolder: "在资源管理器中定位",
+      copyPath: "复制路径",
       allHidden: "项目都已隐藏",
       current: "当前项目",
     },
@@ -151,6 +161,23 @@ export default Plugin.define({
 
     const restoreProject = (key: string) => persistHidden(hidden().filter((value) => value !== key))
 
+    const openFolder = async (project: ProjectInfo) => {
+      if (!ctx.desktop) {
+        await ctx.system.copy(project.canonical)
+        return
+      }
+      await ctx.desktop.launch(project.canonical)
+    }
+
+    const revealFolder = async (project: ProjectInfo) => {
+      if (ctx.desktop && (await ctx.desktop.reveal(project.canonical))) return
+      await ctx.system.copy(project.canonical)
+    }
+
+    const copyPath = async (project: ProjectInfo) => {
+      await ctx.system.copy(project.canonical)
+    }
+
     function ProjectList() {
       const [projects, setProjects] = createSignal<readonly ProjectInfo[]>()
       const [error, setError] = createSignal<string>()
@@ -172,6 +199,26 @@ export default Plugin.define({
       }
 
       onMount(load)
+
+      const [menu, setMenu] = createSignal<{ x: number; y: number; project: ProjectInfo } | null>(null)
+
+      const openContext = (event: MouseEvent, project: ProjectInfo) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const x = Math.min(event.clientX, window.innerWidth - 220)
+        const y = Math.min(event.clientY, window.innerHeight - 150)
+        setMenu({ x, y, project })
+      }
+
+      const closeMenu = () => setMenu(null)
+
+      onMount(() => {
+        const onKey = (event: KeyboardEvent) => {
+          if (event.key === "Escape") closeMenu()
+        }
+        window.addEventListener("keydown", onKey)
+        onCleanup(() => window.removeEventListener("keydown", onKey))
+      })
 
       const same = (project: ProjectInfo) => {
         const dir = ctx.sessions.current()?.directory
@@ -237,7 +284,7 @@ export default Plugin.define({
                     <ul class="opencodeex-list">
                       <For each={shown()}>
                         {(project) => (
-                          <li class="opencodeex-row">
+                          <li class="opencodeex-row" onContextMenu={(event) => openContext(event, project)}>
                             <button
                               type="button"
                               class="opencodeex-item"
@@ -272,6 +319,58 @@ export default Plugin.define({
                 )
               }}
             </Show>
+          </Show>
+          <Show when={menu()}>
+            {(current) => (
+              <>
+                <div
+                  class="opencodeex-backdrop"
+                  onMouseDown={closeMenu}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    closeMenu()
+                  }}
+                />
+                <div
+                  class="opencodeex-context"
+                  style={{ left: `${current().x}px`, top: `${current().y}px` }}
+                >
+                  <button
+                    type="button"
+                    class="opencodeex-context-item"
+                    onClick={() => {
+                      void openFolder(current().project)
+                      closeMenu()
+                    }}
+                  >
+                    <ui.Icon name="folder" size="small" />
+                    <span>{ctx.t("openFolder")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opencodeex-context-item"
+                    onClick={() => {
+                      void revealFolder(current().project)
+                      closeMenu()
+                    }}
+                  >
+                    <ui.Icon name="select-element" size="small" />
+                    <span>{ctx.t("revealFolder")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opencodeex-context-item"
+                    onClick={() => {
+                      void copyPath(current().project)
+                      closeMenu()
+                    }}
+                  >
+                    <ui.Icon name="copy" size="small" />
+                    <span>{ctx.t("copyPath")}</span>
+                  </button>
+                </div>
+              </>
+            )}
           </Show>
         </>
       )
