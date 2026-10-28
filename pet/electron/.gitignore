@@ -3,3 +3,4 @@ dist/
 pet.log
 capture.png
 app/public/*.vrm
+animations/*.vrma

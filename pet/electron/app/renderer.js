@@ -106,6 +106,10 @@ async function playAnimation(url) {
   mixer.clipAction(clip).play()
 }
 
+let nextTalk = performance.now() + 90000
+let nextAnim = performance.now() + 25000
+let animationUrls = []
+
 const savedModelUrl = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
 try {
   await loadModel(savedModelUrl)
@@ -252,6 +256,33 @@ function currentModel() {
   const value = localStorage.getItem("pet.model") || ""
   const [providerID, id] = value.split("|")
   return providerID && id ? { providerID, id } : undefined
+}
+
+async function autonomousTalk() {
+  if (speaking || !composer.classList.contains("hidden") || !settings.classList.contains("hidden")) return
+  const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news"]
+  const kind = kinds[Math.floor(Math.random() * kinds.length)]
+  let prompt
+  if (kind === "greeting") {
+    prompt = "用一句自然、亲切的中文向用户打招呼，像桌面宠物一样，不要超过20个字。"
+  } else if (kind === "eaten") {
+    prompt = "用一句自然的中文问用户吃饭了没有，关心但不要啰嗦，不要超过20个字。"
+  } else {
+    const topic = await window.pet?.fetchTopic(kind)
+    if (!topic?.ok) {
+      prompt = kind === "weather" ? "用一句中文问候用户，并提醒注意天气。" : "用一句中文和用户聊聊最近的新鲜事。"
+    } else if (kind === "weather") {
+      prompt = `根据这条天气信息，用一两句自然的口语中文播报天气，并给一句简短提醒：${topic.text}`
+    } else {
+      prompt = `根据这些标题，用一两句自然的口语中文播报${kind === "ai-news" ? "AI 新闻" : "国际新闻"}，不要逐条念：${topic.items.join("；")}`
+    }
+  }
+  const result = await window.pet?.chat(prompt, [], currentModel())
+  if (result?.ok && result.text) {
+    lastText = cleanText(result.text)
+    showBubble(lastText)
+    speak(lastText)
+  }
 }
 
 async function sendPrompt() {
@@ -427,6 +458,7 @@ const animDropdown = createDropdown(ddAnim, [{ value: "", label: "无（自然�
 
 async function loadAnimationList() {
   const list = (await window.pet?.listAnimations()) || []
+  animationUrls = list.map((item) => item.url)
   const options = [
     { value: "", label: "无（自然站立）" },
     ...list.map((item) => ({ value: item.url, label: item.name })),
@@ -617,6 +649,24 @@ function animate() {
   const delta = clock.getDelta()
   const time = clock.elapsedTime
 
+  if (!speaking && performance.now() > nextTalk) {
+    nextTalk = performance.now() + 180000 + Math.random() * 240000
+    void autonomousTalk()
+  }
+  if (!mixer && !speaking && animationUrls.length && performance.now() > nextAnim) {
+    nextAnim = performance.now() + 45000 + Math.random() * 60000
+    const url = animationUrls[Math.floor(Math.random() * animationUrls.length)]
+    void playAnimation(url)
+      .then(() => {
+        setTimeout(() => {
+          if (mixer) {
+            mixer.stopAllAction()
+            mixer = null
+          }
+        }, 8000)
+      })
+      .catch(() => {})
+  }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
     hiddenAt = 0

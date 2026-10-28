@@ -1,0 +1,255 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.drag {
+  width: 100%;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: grab;
+}
+
+.bubble-area {
+  width: 100%;
+  height: 110px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.bubble {
+  max-width: 280px;
+  max-height: 100px;
+  overflow: auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(22, 24, 29, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f0f4ff;
+  font: 12px/1.55 "Microsoft YaHei", system-ui, sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.bubble.hidden {
+  display: none;
+}
+
+#view {
+  width: 260px;
+  height: 340px;
+  display: block;
+}
+
+.composer {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 100px;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(22, 24, 29, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.composer.hidden,
+.settings.hidden,
+.context-menu.hidden {
+  display: none;
+}
+
+.composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 14, 0.9);
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  outline: none;
+}
+
+.composer button {
+  width: 34px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(70, 110, 200, 0.85);
+  color: #fff;
+  cursor: pointer;
+}
+
+.settings {
+  position: absolute;
+  right: 8px;
+  bottom: 12px;
+  width: 280px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(22, 24, 29, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings label span {
+  width: 40px;
+  opacity: 0.7;
+}
+
+.settings select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 14, 0.9);
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.dd {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.dd-trigger {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 14, 0.9);
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dd-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.dd-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(16, 18, 24, 0.99);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+.dd-list.up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.dd-list.hidden {
+  display: none;
+}
+
+.dd-option {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dd-option:hover {
+  background: rgba(80, 110, 200, 0.3);
+}
+
+.dd-option.active {
+  background: rgba(80, 110, 200, 0.45);
+}
+
+.hint {
+  min-height: 16px;
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.context-menu {
+  position: absolute;
+  min-width: 170px;
+  padding: 4px;
+  border-radius: 9px;
+  background: rgba(22, 24, 29, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.context-menu button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f0f4ff;
+  font: 12px "Microsoft YaHei", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: rgba(90, 110, 160, 0.35);
+}
+
+.context-menu .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.12);
+}

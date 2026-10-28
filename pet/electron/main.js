@@ -35,6 +35,45 @@ async function apiRequest(method, endpoint, body) {
   })
 }
 
+async function fetchText(url, timeout = 15000) {
+  const res = await fetch(url, {
+    headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    signal: AbortSignal.timeout(timeout),
+  })
+  if (!res.ok) throw new Error(String(res.status))
+  return res.text()
+}
+
+ipcMain.handle("pet:topic", async (_event, kind) => {
+  try {
+    if (kind === "weather") {
+      const text = await fetchText("https://wttr.in/?format=3")
+      return { ok: true, text: text.trim() }
+    }
+    if (kind === "ai-news") {
+      const res = await fetch("https://hn.algolia.com/api/v1/search?query=AI&tags=story&hitsPerPage=12", {
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await res.json()
+      const items = (json.hits || [])
+        .map((hit) => hit.title)
+        .filter((title) => typeof title === "string" && title.trim() && !/comments|HN is for/i.test(title))
+        .slice(0, 3)
+      return { ok: true, items }
+    }
+    if (kind === "world-news") {
+      const res = await fetch("https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=8", {
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await res.json()
+      const items = (json.hits || []).map((hit) => hit.title).filter(Boolean).slice(0, 4)
+      return { ok: true, items }
+    }
+    return { ok: false }
+  } catch (error) {
+    return { ok: false, error: String(error) }
+  }
+})
 ipcMain.handle("pet:models", async () => {  try {
     const res = await apiRequest("GET", "/api/model")
     if (!res.ok) return []

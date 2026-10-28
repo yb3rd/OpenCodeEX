@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenCode Pet</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="drag" title="拖动移动窗口">⠿</div>
+    <div class="bubble-area">
+      <div id="bubble" class="bubble hidden"></div>
+    </div>
+    <canvas id="view"></canvas>
+
+    <div id="composer" class="composer hidden">
+      <input id="prompt" placeholder="对宠物说点什么…（Enter 发送）" />
+      <button id="send" title="发送">➤</button>
+      <button id="composer-close" title="关闭">✕</button>
+    </div>
+
+    <div id="settings" class="settings hidden">
+      <div class="settings-title">模型设置</div>
+      <label>
+        <span>模型</span>
+        <div class="dd" id="dd-modelFile"></div>
+      </label>
+      <label>
+        <span>动作</span>
+        <div class="dd" id="dd-anim"></div>
+      </label>
+      <label>
+        <span>来源</span>
+        <div class="dd" id="dd-mode"></div>
+      </label>
+      <label>
+        <span>模型</span>
+        <div class="dd" id="dd-model"></div>
+      </label>
+      <label>
+        <span>声音</span>
+        <div class="dd" id="dd-voice"></div>
+      </label>
+      <label>
+        <span>语速</span>
+        <div class="dd" id="dd-rate"></div>
+      </label>
+      <label>
+        <span>音调</span>
+        <div class="dd" id="dd-pitch"></div>
+      </label>
+      <div id="settings-hint" class="hint"></div>
+    </div>
+
+    <div id="menu" class="context-menu hidden">
+      <button data-action="compose">💬 输入消息</button>
+      <button data-action="voice">📢 朗读上一条</button>
+      <button data-action="mute">🔇 静音</button>
+      <button data-action="settings">⚙ 模型设置</button>
+      <button data-action="models">📁 打开模型文件夹</button>
+      <button data-action="importAnim">📥 导入动作文件</button>
+      <div class="sep"></div>
+      <button data-action="quit">✕ 退出</button>
+    </div>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>
