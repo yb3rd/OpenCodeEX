@@ -1,9 +1,45 @@
-# OpenCode 桌面宠物（Electron + VRM）
+# OpenCode 桌面宠物（VRM）
 
 一个独立运行的透明置顶桌宠，有自己的对话记忆，不会把聊天写入 OpenCode 会话。
 推理通过本地 OpenCode 服务的无状态生成接口完成（`/api/experimental/generate/text`），只借用模型能力。
 
+当前有两套实现：
+
+| 目录 | 技术栈 | 状态 |
+| --- | --- | --- |
+| `pet/tauri` | **Tauri v2（Rust 后端 + WebView 前端）** | 与 Desktop Homunculus 同栈，主推 |
+| `pet/electron` | Electron + three-vrm | 旧版，保留作对照 |
+
+两套前端共用同一套 VRM/VRMA 渲染逻辑，行为一致。
+
 ## 运行
+
+### Tauri（推荐）
+
+需要：Rust（stable）、Node.js、VS Build Tools（Windows）。
+
+```bash
+cd pet/tauri
+npm install
+npm run tauri dev
+```
+
+打包：
+
+```bash
+npm run tauri build
+```
+
+首次运行前准备模型与动作（均不入库）：
+
+```text
+pet/tauri/models/      放 *.vrm
+pet/tauri/animations/  放 *.vrma
+```
+
+也可以启动后右键 →「打开模型文件夹」/「导入动作文件」。
+
+### Electron
 
 ```bash
 cd pet/electron
@@ -17,19 +53,45 @@ npm run start
 
 | 操作 | 功能 |
 | --- | --- |
-| 拖动人物 | 移动到桌面任意位置 |
-| **双击人物** | 打开输入框，和宠物对话（Enter 发送，Esc 关闭） |
-| **右键人物** | 菜单：输入消息 / 朗读上一条 / 静音 / 跳舞 / 模型设置 / 退出 |
+| 拖动人物 | 移动窗口 |
+| **双击人物** | 打开输入框，和宠物对话（Enter 发送，Esc 关闭），输入框在膝盖高度 |
+| **右键人物** | 菜单：输入消息 / 朗读上一条 / 朗读下一条 / 静音 / 换模型 / 设置 / 打开模型文件夹 / 导入动作文件 / 退出；菜单右上角 ✕ 可关闭 |
+
+「换模型」直接在右键菜单里展开 VRM 列表，选中即切换，不需要进设置。
+「朗读下一条」会立刻触发一次主动说话（随机话题）并朗读。
 
 对话记录保存在宠物自己的 `localStorage`（最近 20 条），不会出现在 OpenCode 的会话列表里。
 
-## 模型设置
+透明区域点击穿透：Tauri 版用 Windows `SetWindowRgn` 按交互区域裁剪窗口，Electron 版用 `setShape`。
+不挡其他应用的点击、输入框和任务栏。
 
-右键 → 模型设置：
+## 自主行为
 
-- **来源**：`OpenCode Go` 或 `API`
-- **模型**：从 `/api/model` 拉取对应来源的模型列表
-- 选择只影响宠物自己的对话，不切换 OpenCode 会话模型
+- **随机动作**：每 45–90 秒从 `animations/` 里随机播放一段 VRMA，播完回到自然站立
+- **主动说话**：每 3–8 分钟随机挑一个话题，用 TTS 说出来
+  - 打招呼
+  - 问吃饭了没有
+  - 天气（`wttr.in`，按 IP 定位）
+  - AI 新闻（Hacker News Algolia）
+  - 国际新闻（Hacker News 首页）
+  - 二次元 / 日本动画（B 站动画排行榜）
+  - 游戏（B 站游戏排行榜）
+  - ACG（机核 RSS）
+- 无网络或接口失败时自动降级为简短问候
+- 输入框打开、设置打开或正在说话时不会自动说话
+
+## 模型与动作
+
+- 模型：默认 `AvatarSample_A`（VRM 0.0，本地文件，不入库）；右键 →「换模型」可直接切换
+- 动作：`idle-maid` / `grabbed` / `idle-sitting`，来自 npm 包 `@hmcs/assets`
+  - 作者：not-elm / Desktop Homunculus
+  - 授权：**CC-BY-4.0**（`@hmcs/assets` 为 MIT AND CC-BY-4.0）
+  - 仓库不提交 `.vrma` / `.vrm` 原文件，仅在本机使用；公开发布二进制时请保留署名
+- 导入自己的动作：右键 →「导入动作文件」，选择 `.vrma`，会复制到 `animations/` 并立即播放
+
+## 对话模型
+
+设置 → 来源（`OpenCode Go` / `API`）+ 对话模型。首次启动会自动选一个 `flash` 模型；选择只影响宠物自己的对话，不切换 OpenCode 会话模型。
 
 ## 语音
 
@@ -65,13 +127,8 @@ pip install edge-tts
 - `.gitignore` 已屏蔽 `service.json`、`auth.json`、`.env`、`*.pem`
 - OpenCode Go 的认证始终留在本机，不会上传 GitHub
 
-## 模型
-
-- 默认 `app/public/sample.vrm`（three-vrm 官方示例，仅用于开发验证）
-- 换成自己的：把 `.vrm` 放进 `app/public/`，改 `app/renderer.js` 的 `loader.loadAsync("./sample.vrm")`
-- 模型文件不入库，请确认授权
-
 ## 已知限制
 
 - 口型是按音节随机切换的近似动画，不是精确音素同步
 - 推理依赖本地 OpenCode 服务在运行；如果要完全脱离 OpenCode，需要改成直连模型 API（填 baseURL + API Key）
+- Tauri 版目前只在 Windows 上验证过透明窗口与点击穿透

@@ -44,6 +44,22 @@ async function fetchText(url, timeout = 15000) {
   return res.text()
 }
 
+function decodeEntities(text) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
+function parseRssTitles(xml, limit) {
+  return [...xml.matchAll(/<item>[\s\S]*?<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/g)]
+    .map((match) => decodeEntities(match[1]).trim())
+    .filter(Boolean)
+    .slice(0, limit)
+}
+
 ipcMain.handle("pet:topic", async (_event, kind) => {
   try {
     if (kind === "weather") {
@@ -59,6 +75,30 @@ ipcMain.handle("pet:topic", async (_event, kind) => {
         .map((hit) => hit.title)
         .filter((title) => typeof title === "string" && title.trim() && !/comments|HN is for/i.test(title))
         .slice(0, 3)
+      return { ok: true, items }
+    }
+    if (kind === "anime-news" || kind === "game-news") {
+      const rid = kind === "game-news" ? 4 : 1
+      const res = await fetch(`https://api.bilibili.com/x/web-interface/ranking/v2?rid=${rid}&type=all`, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          referer: "https://www.bilibili.com",
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      const json = await res.json()
+      const items = (json.data?.list || [])
+        .map((item) => item.title)
+        .filter((title) => typeof title === "string" && title.trim())
+        .slice(0, 4)
+      if (!items.length) throw new Error("empty")
+      return { ok: true, items }
+    }
+    if (kind === "acg-news") {
+      const xml = await fetchText("https://www.gcores.com/rss")
+      const items = parseRssTitles(xml, 4)
+      if (!items.length) throw new Error("empty")
       return { ok: true, items }
     }
     if (kind === "world-news") {
@@ -97,7 +137,7 @@ ipcMain.handle("pet:chat", async (_event, payload) => {
     .join("\n")
 
   const prompt = [
-    "你是桌面宠物助手，用简洁、自然、口语化的中文回答。回答尽量短，适合朗读。",
+    "你是桌面宠物助手，用简洁、自然、口语化的中文回答。尽量一句话说完，不超过50个字，适合朗读。",
     lines ? `之前的对话：\n${lines}` : "",
     `用户：${text}`,
   ]
@@ -313,9 +353,9 @@ function createWindow() {
   const scale = display.scaleFactor || 1
   const area = display.workArea
   const width = 300
-  const height = 520
+  const height = 340
   const x = Math.round((area.x + area.width) / scale - 324)
-  const y = Math.round((area.y + area.height) / scale - 580)
+  const y = Math.round((area.y + area.height) / scale - 400)
 
   win = new BrowserWindow({
     width,

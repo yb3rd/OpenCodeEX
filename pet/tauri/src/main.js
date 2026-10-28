@@ -2,6 +2,10 @@ import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm"
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation"
+import { invoke, convertFileSrc } from "@tauri-apps/api/core"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+
+const appWindow = getCurrentWindow()
 
 const canvas = document.getElementById("view")
 const bubble = document.getElementById("bubble")
@@ -11,13 +15,13 @@ const sendButton = document.getElementById("send")
 const settings = document.getElementById("settings")
 const ddMode = document.getElementById("dd-mode")
 const ddModel = document.getElementById("dd-model")
-const ddModelFile = document.getElementById("dd-modelFile")
 const ddAnim = document.getElementById("dd-anim")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
+const menuModelList = document.getElementById("model-list")
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -46,6 +50,10 @@ let baseYaw = 0
 const restRotations = new Map()
 
 async function loadModel(url) {
+  const gltf = await loader.loadAsync(url)
+  const next = gltf.userData.vrm
+  if (!next) throw new Error("VRM not found")
+
   if (mixer) {
     mixer.stopAllAction()
     mixer = null
@@ -59,8 +67,7 @@ async function loadModel(url) {
   }
   restRotations.clear()
 
-  const gltf = await loader.loadAsync(url)
-  vrm = gltf.userData.vrm
+  vrm = next
   VRMUtils.rotateVRM0(vrm)
   armSign = vrm.meta?.metaVersion === "0" ? -1 : 1
   baseYaw = armSign < 0 ? Math.PI : 0
@@ -116,6 +123,10 @@ try {
   }
 }
 
+let nextTalk = performance.now() + 90000
+let nextAnim = performance.now() + 25000
+let animationUrls = []
+
 let speaking = false
 let lastText = ""
 let hiddenAt = 0
@@ -162,7 +173,7 @@ async function speak(text, force = false) {
   if (voice !== "system") {
     const rate = localStorage.getItem("pet.rate") || "+0%"
     const pitch = localStorage.getItem("pet.pitch") || "+0Hz"
-    const result = await window.pet?.speak(text, voice, { rate, pitch })
+    const result = await invoke("speak", { text, voice, rate, pitch })
     if (!result?.ok) console.log(`[speak] failed: ${result?.error ?? "unknown"}`)
     if (result?.ok && result.audio) {
       try {
@@ -229,6 +240,17 @@ function testVoice() {
   speak(text, true)
 }
 
+async function speakNext() {
+  if (audio) {
+    audio.pause()
+    audio = null
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel()
+  speaking = false
+  showBubble("让我想想下一条…")
+  await autonomousTalk(true)
+}
+
 function openComposer() {
   settings.classList.add("hidden")
   menu.classList.add("hidden")
@@ -254,13 +276,57 @@ function currentModel() {
   return providerID && id ? { providerID, id } : undefined
 }
 
+async function autonomousTalk(manual = false) {
+  if (!manual && (speaking || !composer.classList.contains("hidden") || !settings.classList.contains("hidden"))) return
+  const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news", "anime-news", "game-news", "acg-news"]
+  const kind = kinds[Math.floor(Math.random() * kinds.length)]
+  let prompt
+  if (kind === "greeting") {
+    prompt = "用一句自然、亲切的中文向用户打招呼，像桌面宠物一样，不要超过20个字。"
+  } else if (kind === "eaten") {
+    prompt = "用一句自然的中文问用户吃饭了没有，关心但不要啰嗦，不要超过20个字。"
+  } else {
+    const topic = await invoke("topic", { kind })
+    if (!topic?.ok) {
+      const fallbacks = {
+        weather: "用一句中文问候用户，并提醒注意天气。",
+        "anime-news": "用一句中文和用户聊聊最近的新番动画。",
+        "game-news": "用一句中文和用户聊聊最近在玩的游戏。",
+        "acg-news": "用一句中文和用户聊聊最近的二次元话题。",
+      }
+      prompt = fallbacks[kind] || "用一句中文和用户聊聊最近的新鲜事。"
+    } else if (kind === "weather") {
+      prompt = `根据这条天气信息，用一两句自然的口语中文播报天气，并给一句简短提醒：${topic.text}`
+    } else {
+      const labels = {
+        "ai-news": "AI 新闻",
+        "world-news": "国际新闻",
+        "anime-news": "二次元新闻",
+        "game-news": "游戏新闻",
+        "acg-news": "ACG 新闻",
+      }
+      prompt = `根据这些标题，用一两句自然的口语中文播报${labels[kind] || "新闻"}，不要逐条念：${topic.items.join("；")}`
+    }
+  }
+  const result = await invoke("chat", { text: prompt, history: [], model: currentModel() })
+  if (result?.ok && result.text) {
+    lastText = cleanText(result.text)
+    showBubble(lastText)
+    speak(lastText)
+  } else if (manual) {
+    lastText = "我现在还没想好说什么，稍后再聊吧。"
+    showBubble(lastText)
+    speak(lastText, true)
+  }
+}
+
 async function sendPrompt() {
   const text = promptInput.value.trim()
   if (!text) return
   promptInput.value = ""
   composer.classList.add("hidden")
   showBubble(`你：${text}`)
-  const result = await window.pet?.chat(text, history, currentModel())
+  const result = await invoke("chat", { text, history, model: currentModel() })
   if (!result?.ok || !result.text) {
     showBubble(`回复失败：${result?.error || result?.status || "未知错误"}`)
     return
@@ -275,6 +341,15 @@ async function sendPrompt() {
 }
 
 let models = []
+
+async function ensureDefaultModel() {
+  if (localStorage.getItem("pet.model")) return
+  const list = (await invoke("list_models")) || []
+  if (!list.length) return
+  const go = list.filter((item) => item.providerID === "opencode-go")
+  const pick = go.find((item) => /flash/i.test(item.id)) || go[0] || list[0]
+  if (pick) localStorage.setItem("pet.model", `${pick.providerID}|${pick.id}`)
+}
 
 const modeOptions = [
   { value: "go", label: "OpenCode Go" },
@@ -354,7 +429,11 @@ function createDropdown(root, options, value, onChange) {
     event.stopPropagation()
     closeAllDropdowns(list)
     const rect = trigger.getBoundingClientRect()
-    list.classList.toggle("up", window.innerHeight - rect.bottom < 260)
+    const below = window.innerHeight - rect.bottom - 8
+    const above = rect.top - 8
+    const openUp = below < Math.min(220, above)
+    list.classList.toggle("up", openUp)
+    list.style.maxHeight = `${Math.max(80, Math.min(220, openUp ? above : below))}px`
     list.classList.toggle("hidden")
   })
 
@@ -392,44 +471,55 @@ const modelDropdown = createDropdown(ddModel, [], "", (value) => {
   settingsHint.textContent = "已选择模型"
 })
 
-const modelFileDropdown = createDropdown(
-  ddModelFile,
-  [{ value: "./sample.vrm", label: "默认示例（Constraint）" }],
-  localStorage.getItem("pet.modelUrl") || "./sample.vrm",
-  async (url) => {
-    localStorage.setItem("pet.modelUrl", url)
-    settingsHint.textContent = "加载模型中…"
-    try {
-      await loadModel(url)
-      settingsHint.textContent = "已切换模型"
-    } catch {
-      settingsHint.textContent = "模型加载失败"
-    }
-  },
-)
+let modelFiles = []
 
-async function loadModelList() {
-  const list = (await window.pet?.listModels()) || []
-  const options = [
-    { value: "./sample.vrm", label: "默认示例（Constraint）" },
-    ...list.map((item) => ({ value: item.url, label: item.name })),
-  ]
-  modelFileDropdown.setOptions(options)
-  const saved = localStorage.getItem("pet.modelUrl")
-  if (saved && options.some((option) => option.value === saved)) {
-    modelFileDropdown.setValue(saved)
+function renderModelMenu() {
+  if (!menuModelList) return
+  menuModelList.innerHTML = ""
+  const current = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
+  const items = [{ name: "默认示例", url: "./sample.vrm" }, ...modelFiles]
+  for (const item of items) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.textContent = (item.url === current ? "✓ " : "") + item.name
+    if (item.url === current) button.classList.add("active")
+    button.addEventListener("click", (event) => {
+      event.stopPropagation()
+      closeMenu()
+      void switchModel(item.url, item.name)
+    })
+    menuModelList.append(button)
   }
+}
+
+async function switchModel(url, name) {
+  localStorage.setItem("pet.modelUrl", url)
+  showBubble(`正在切换到 ${name}…`)
+  try {
+    await loadModel(url)
+    showBubble(`已切换到 ${name}`)
+  } catch {
+    showBubble("模型加载失败")
+  }
+}
+
+async function loadModelFiles() {
+  const list = (await invoke("list_model_files")) || []
+  modelFiles = list.map((item) => ({ name: item.name, url: convertFileSrc(item.path) }))
+  renderModelMenu()
 }
 
 const animDropdown = createDropdown(ddAnim, [{ value: "", label: "无（自然站立）" }], "", (url) => {
   void playAnimation(url)
+  setTimeout(() => settings.classList.add("hidden"), 120)
 })
 
 async function loadAnimationList() {
-  const list = (await window.pet?.listAnimations()) || []
+  const list = (await invoke("list_animations")) || []
+  animationUrls = list.map((item) => convertFileSrc(item.path))
   const options = [
     { value: "", label: "无（自然站立）" },
-    ...list.map((item) => ({ value: item.url, label: item.name })),
+    ...list.map((item) => ({ value: convertFileSrc(item.path), label: item.name })),
   ]
   animDropdown.setOptions(options)
 }
@@ -482,9 +572,8 @@ async function openSettings() {
   menu.classList.add("hidden")
   settings.classList.toggle("hidden")
   if (settings.classList.contains("hidden")) return
-  if (!models.length) models = (await window.pet?.models()) || []
+  if (!models.length) models = (await invoke("list_models")) || []
   fillModels()
-  void loadModelList()
   void loadAnimationList()
 }
 
@@ -498,16 +587,20 @@ function closeMenu() {
 }
 
 window.addEventListener("contextmenu", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
   event.preventDefault()
   refreshMenu()
+  renderModelMenu()
+  menuModelList?.classList.add("hidden")
   menu.classList.remove("hidden")
-  menu.style.left = `${Math.min(event.clientX, window.innerWidth - 190)}px`
-  menu.style.top = `${Math.min(event.clientY, window.innerHeight - 250)}px`
+  const width = menu.offsetWidth
+  const height = menu.offsetHeight
+  menu.style.left = `${Math.max(6, Math.min(event.clientX, window.innerWidth - width - 6))}px`
+  menu.style.top = `${Math.max(6, Math.min(event.clientY, window.innerHeight - height - 6))}px`
 })
 
 window.addEventListener("dblclick", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
   openComposer()
 })
 
@@ -515,23 +608,32 @@ menu.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]")
   if (!button) return
   const action = button.dataset.action
+  if (action === "switchModel") {
+    renderModelMenu()
+    menuModelList?.classList.toggle("hidden")
+    const rect = menu.getBoundingClientRect()
+    const overflow = rect.bottom - window.innerHeight + 6
+    if (overflow > 0) menu.style.top = `${Math.max(6, rect.top - overflow)}px`
+    return
+  }
   closeMenu()
   if (action === "compose") openComposer()
   else if (action === "voice") testVoice()
+  else if (action === "voiceNext") void speakNext()
   else if (action === "mute") toggleVoice()
   else if (action === "settings") void openSettings()
-  else if (action === "models") void window.pet?.openModels()
+  else if (action === "models") void invoke("open_models")
   else if (action === "importAnim") {
     void (async () => {
-      const picked = await window.pet?.pickAnimation()
+      const picked = await invoke("pick_animation")
       if (!picked) return
-      await playAnimation(picked.url)
+      await playAnimation(convertFileSrc(picked.path))
       await loadAnimationList()
-      animDropdown.setValue(picked.url)
+      animDropdown.setValue(convertFileSrc(picked.path))
       showBubble(`已导入动作：${picked.name}`)
     })()
   }
-  else if (action === "quit") window.pet?.quit()
+  else if (action === "quit") appWindow.close()
 })
 
 sendButton.addEventListener("click", () => void sendPrompt())
@@ -554,17 +656,11 @@ function publishZones() {
   const zones = []
   const canvasRect = canvas.getBoundingClientRect()
   zones.push({
-    x: canvasRect.left + 55,
+    x: canvasRect.left + 20,
     y: canvasRect.top,
-    w: canvasRect.width - 110,
+    w: canvasRect.width - 40,
     h: canvasRect.height,
   })
-
-  const dragBar = document.querySelector(".drag")
-  if (dragBar) {
-    const rect = dragBar.getBoundingClientRect()
-    zones.push({ x: rect.left + rect.width / 2 - 100, y: rect.top, w: 200, h: rect.height })
-  }
 
   if (!bubble.classList.contains("hidden")) {
     const rect = bubble.getBoundingClientRect()
@@ -578,10 +674,17 @@ function publishZones() {
     }
   }
 
-  window.pet?.setZones(zones)
+  for (const element of document.querySelectorAll(".dd-list:not(.hidden)")) {
+    const rect = element.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+    }
+  }
+
+  void invoke("set_zones", { zones })
 }
 
-setInterval(publishZones, 300)
+setInterval(publishZones, 120)
 publishZones()
 
 window.addEventListener("mousedown", (event) => {
@@ -595,16 +698,14 @@ window.addEventListener("mousedown", (event) => {
     settings.classList.add("hidden")
   }
   if (event.button !== 0) return
-  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
   dragging = true
-  window.pet?.dragStart({ x: event.clientX, y: event.clientY })
+  void appWindow.startDragging()
   event.preventDefault()
 })
 
 window.addEventListener("mouseup", () => {
-  if (!dragging) return
   dragging = false
-  window.pet?.dragEnd()
 })
 
 window.addEventListener("mousedown", () => {
@@ -617,6 +718,24 @@ function animate() {
   const delta = clock.getDelta()
   const time = clock.elapsedTime
 
+  if (!speaking && performance.now() > nextTalk) {
+    nextTalk = performance.now() + 180000 + Math.random() * 240000
+    void autonomousTalk()
+  }
+  if (!mixer && !speaking && animationUrls.length && performance.now() > nextAnim) {
+    nextAnim = performance.now() + 45000 + Math.random() * 60000
+    const url = animationUrls[Math.floor(Math.random() * animationUrls.length)]
+    void playAnimation(url)
+      .then(() => {
+        setTimeout(() => {
+          if (mixer) {
+            mixer.stopAllAction()
+            mixer = null
+          }
+        }, 8000)
+      })
+      .catch(() => {})
+  }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
     hiddenAt = 0
@@ -666,3 +785,6 @@ function animate() {
 }
 
 animate()
+void loadAnimationList()
+void loadModelFiles()
+void ensureDefaultModel()

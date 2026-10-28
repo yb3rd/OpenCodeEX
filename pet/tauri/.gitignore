@@ -1,6 +1,10 @@
 ﻿node_modules/
 dist/
 src-tauri/target/
+src-tauri/gen/
 public/*.vrm
+models/*.vrm
 animations/*.vrma
-
+src-tauri/.cargo/
+src-tauri/cargo-check.log
+src-tauri/cargo-build.log

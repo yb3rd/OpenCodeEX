@@ -11,13 +11,13 @@ const sendButton = document.getElementById("send")
 const settings = document.getElementById("settings")
 const ddMode = document.getElementById("dd-mode")
 const ddModel = document.getElementById("dd-model")
-const ddModelFile = document.getElementById("dd-modelFile")
 const ddAnim = document.getElementById("dd-anim")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
+const menuModelList = document.getElementById("model-list")
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -46,6 +46,10 @@ let baseYaw = 0
 const restRotations = new Map()
 
 async function loadModel(url) {
+  const gltf = await loader.loadAsync(url)
+  const next = gltf.userData.vrm
+  if (!next) throw new Error("VRM not found")
+
   if (mixer) {
     mixer.stopAllAction()
     mixer = null
@@ -59,8 +63,7 @@ async function loadModel(url) {
   }
   restRotations.clear()
 
-  const gltf = await loader.loadAsync(url)
-  vrm = gltf.userData.vrm
+  vrm = next
   VRMUtils.rotateVRM0(vrm)
   armSign = vrm.meta?.metaVersion === "0" ? -1 : 1
   baseYaw = armSign < 0 ? Math.PI : 0
@@ -233,6 +236,17 @@ function testVoice() {
   speak(text, true)
 }
 
+async function speakNext() {
+  if (audio) {
+    audio.pause()
+    audio = null
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel()
+  speaking = false
+  showBubble("让我想想下一条…")
+  await autonomousTalk(true)
+}
+
 function openComposer() {
   settings.classList.add("hidden")
   menu.classList.add("hidden")
@@ -258,9 +272,9 @@ function currentModel() {
   return providerID && id ? { providerID, id } : undefined
 }
 
-async function autonomousTalk() {
-  if (speaking || !composer.classList.contains("hidden") || !settings.classList.contains("hidden")) return
-  const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news"]
+async function autonomousTalk(manual = false) {
+  if (!manual && (speaking || !composer.classList.contains("hidden") || !settings.classList.contains("hidden"))) return
+  const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news", "anime-news", "game-news", "acg-news"]
   const kind = kinds[Math.floor(Math.random() * kinds.length)]
   let prompt
   if (kind === "greeting") {
@@ -270,11 +284,24 @@ async function autonomousTalk() {
   } else {
     const topic = await window.pet?.fetchTopic(kind)
     if (!topic?.ok) {
-      prompt = kind === "weather" ? "用一句中文问候用户，并提醒注意天气。" : "用一句中文和用户聊聊最近的新鲜事。"
+      const fallbacks = {
+        weather: "用一句中文问候用户，并提醒注意天气。",
+        "anime-news": "用一句中文和用户聊聊最近的新番动画。",
+        "game-news": "用一句中文和用户聊聊最近在玩的游戏。",
+        "acg-news": "用一句中文和用户聊聊最近的二次元话题。",
+      }
+      prompt = fallbacks[kind] || "用一句中文和用户聊聊最近的新鲜事。"
     } else if (kind === "weather") {
       prompt = `根据这条天气信息，用一两句自然的口语中文播报天气，并给一句简短提醒：${topic.text}`
     } else {
-      prompt = `根据这些标题，用一两句自然的口语中文播报${kind === "ai-news" ? "AI 新闻" : "国际新闻"}，不要逐条念：${topic.items.join("；")}`
+      const labels = {
+        "ai-news": "AI 新闻",
+        "world-news": "国际新闻",
+        "anime-news": "二次元新闻",
+        "game-news": "游戏新闻",
+        "acg-news": "ACG 新闻",
+      }
+      prompt = `根据这些标题，用一两句自然的口语中文播报${labels[kind] || "新闻"}，不要逐条念：${topic.items.join("；")}`
     }
   }
   const result = await window.pet?.chat(prompt, [], currentModel())
@@ -282,6 +309,10 @@ async function autonomousTalk() {
     lastText = cleanText(result.text)
     showBubble(lastText)
     speak(lastText)
+  } else if (manual) {
+    lastText = "我现在还没想好说什么，稍后再聊吧。"
+    showBubble(lastText)
+    speak(lastText, true)
   }
 }
 
@@ -306,6 +337,15 @@ async function sendPrompt() {
 }
 
 let models = []
+
+async function ensureDefaultModel() {
+  if (localStorage.getItem("pet.model")) return
+  const list = (await window.pet?.models()) || []
+  if (!list.length) return
+  const go = list.filter((item) => item.providerID === "opencode-go")
+  const pick = go.find((item) => /flash/i.test(item.id)) || go[0] || list[0]
+  if (pick) localStorage.setItem("pet.model", `${pick.providerID}|${pick.id}`)
+}
 
 const modeOptions = [
   { value: "go", label: "OpenCode Go" },
@@ -385,7 +425,11 @@ function createDropdown(root, options, value, onChange) {
     event.stopPropagation()
     closeAllDropdowns(list)
     const rect = trigger.getBoundingClientRect()
-    list.classList.toggle("up", window.innerHeight - rect.bottom < 260)
+    const below = window.innerHeight - rect.bottom - 8
+    const above = rect.top - 8
+    const openUp = below < Math.min(220, above)
+    list.classList.toggle("up", openUp)
+    list.style.maxHeight = `${Math.max(80, Math.min(220, openUp ? above : below))}px`
     list.classList.toggle("hidden")
   })
 
@@ -423,37 +467,47 @@ const modelDropdown = createDropdown(ddModel, [], "", (value) => {
   settingsHint.textContent = "已选择模型"
 })
 
-const modelFileDropdown = createDropdown(
-  ddModelFile,
-  [{ value: "./sample.vrm", label: "默认示例（Constraint）" }],
-  localStorage.getItem("pet.modelUrl") || "./sample.vrm",
-  async (url) => {
-    localStorage.setItem("pet.modelUrl", url)
-    settingsHint.textContent = "加载模型中…"
-    try {
-      await loadModel(url)
-      settingsHint.textContent = "已切换模型"
-    } catch {
-      settingsHint.textContent = "模型加载失败"
-    }
-  },
-)
+let modelFiles = []
 
-async function loadModelList() {
-  const list = (await window.pet?.listModels()) || []
-  const options = [
-    { value: "./sample.vrm", label: "默认示例（Constraint）" },
-    ...list.map((item) => ({ value: item.url, label: item.name })),
-  ]
-  modelFileDropdown.setOptions(options)
-  const saved = localStorage.getItem("pet.modelUrl")
-  if (saved && options.some((option) => option.value === saved)) {
-    modelFileDropdown.setValue(saved)
+function renderModelMenu() {
+  if (!menuModelList) return
+  menuModelList.innerHTML = ""
+  const current = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
+  const items = [{ name: "默认示例", url: "./sample.vrm" }, ...modelFiles]
+  for (const item of items) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.textContent = (item.url === current ? "✓ " : "") + item.name
+    if (item.url === current) button.classList.add("active")
+    button.addEventListener("click", (event) => {
+      event.stopPropagation()
+      closeMenu()
+      void switchModel(item.url, item.name)
+    })
+    menuModelList.append(button)
   }
+}
+
+async function switchModel(url, name) {
+  localStorage.setItem("pet.modelUrl", url)
+  showBubble(`正在切换到 ${name}…`)
+  try {
+    await loadModel(url)
+    showBubble(`已切换到 ${name}`)
+  } catch {
+    showBubble("模型加载失败")
+  }
+}
+
+async function loadModelFiles() {
+  const list = (await window.pet?.listModels()) || []
+  modelFiles = list.map((item) => ({ name: item.name, url: item.url }))
+  renderModelMenu()
 }
 
 const animDropdown = createDropdown(ddAnim, [{ value: "", label: "无（自然站立）" }], "", (url) => {
   void playAnimation(url)
+  setTimeout(() => settings.classList.add("hidden"), 120)
 })
 
 async function loadAnimationList() {
@@ -516,7 +570,6 @@ async function openSettings() {
   if (settings.classList.contains("hidden")) return
   if (!models.length) models = (await window.pet?.models()) || []
   fillModels()
-  void loadModelList()
   void loadAnimationList()
 }
 
@@ -530,16 +583,20 @@ function closeMenu() {
 }
 
 window.addEventListener("contextmenu", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
   event.preventDefault()
   refreshMenu()
+  renderModelMenu()
+  menuModelList?.classList.add("hidden")
   menu.classList.remove("hidden")
-  menu.style.left = `${Math.min(event.clientX, window.innerWidth - 190)}px`
-  menu.style.top = `${Math.min(event.clientY, window.innerHeight - 250)}px`
+  const width = menu.offsetWidth
+  const height = menu.offsetHeight
+  menu.style.left = `${Math.max(6, Math.min(event.clientX, window.innerWidth - width - 6))}px`
+  menu.style.top = `${Math.max(6, Math.min(event.clientY, window.innerHeight - height - 6))}px`
 })
 
 window.addEventListener("dblclick", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
   openComposer()
 })
 
@@ -547,9 +604,18 @@ menu.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]")
   if (!button) return
   const action = button.dataset.action
+  if (action === "switchModel") {
+    renderModelMenu()
+    menuModelList?.classList.toggle("hidden")
+    const rect = menu.getBoundingClientRect()
+    const overflow = rect.bottom - window.innerHeight + 6
+    if (overflow > 0) menu.style.top = `${Math.max(6, rect.top - overflow)}px`
+    return
+  }
   closeMenu()
   if (action === "compose") openComposer()
   else if (action === "voice") testVoice()
+  else if (action === "voiceNext") void speakNext()
   else if (action === "mute") toggleVoice()
   else if (action === "settings") void openSettings()
   else if (action === "models") void window.pet?.openModels()
@@ -586,17 +652,11 @@ function publishZones() {
   const zones = []
   const canvasRect = canvas.getBoundingClientRect()
   zones.push({
-    x: canvasRect.left + 55,
+    x: canvasRect.left + 20,
     y: canvasRect.top,
-    w: canvasRect.width - 110,
+    w: canvasRect.width - 40,
     h: canvasRect.height,
   })
-
-  const dragBar = document.querySelector(".drag")
-  if (dragBar) {
-    const rect = dragBar.getBoundingClientRect()
-    zones.push({ x: rect.left + rect.width / 2 - 100, y: rect.top, w: 200, h: rect.height })
-  }
 
   if (!bubble.classList.contains("hidden")) {
     const rect = bubble.getBoundingClientRect()
@@ -606,6 +666,13 @@ function publishZones() {
   for (const element of [composer, menu, settings]) {
     if (!element.classList.contains("hidden")) {
       const rect = element.getBoundingClientRect()
+      zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+    }
+  }
+
+  for (const element of document.querySelectorAll(".dd-list:not(.hidden)")) {
+    const rect = element.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
       zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
     }
   }
@@ -627,7 +694,7 @@ window.addEventListener("mousedown", (event) => {
     settings.classList.add("hidden")
   }
   if (event.button !== 0) return
-  if (event.target.closest("input, select, textarea, button, .settings, .composer")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
   dragging = true
   window.pet?.dragStart({ x: event.clientX, y: event.clientY })
   event.preventDefault()
@@ -716,3 +783,6 @@ function animate() {
 }
 
 animate()
+void loadAnimationList()
+void loadModelFiles()
+void ensureDefaultModel()

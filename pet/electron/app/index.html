@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="drag" title="拖动移动窗口">⠿</div>
     <div class="bubble-area">
       <div id="bubble" class="bubble hidden"></div>
     </div>
@@ -19,11 +18,7 @@
     </div>
 
     <div id="settings" class="settings hidden">
-      <div class="settings-title">模型设置</div>
-      <label>
-        <span>模型</span>
-        <div class="dd" id="dd-modelFile"></div>
-      </label>
+      <div class="settings-title">设置</div>
       <label>
         <span>动作</span>
         <div class="dd" id="dd-anim"></div>
@@ -33,7 +28,7 @@
         <div class="dd" id="dd-mode"></div>
       </label>
       <label>
-        <span>模型</span>
+        <span>对话模型</span>
         <div class="dd" id="dd-model"></div>
       </label>
       <label>
@@ -52,10 +47,16 @@
     </div>
 
     <div id="menu" class="context-menu hidden">
+      <button class="menu-close" data-action="closeMenu" title="关闭">✕</button>
       <button data-action="compose">💬 输入消息</button>
       <button data-action="voice">📢 朗读上一条</button>
+      <button data-action="voiceNext">📢 朗读下一条</button>
       <button data-action="mute">🔇 静音</button>
-      <button data-action="settings">⚙ 模型设置</button>
+      <div class="menu-group">
+        <button data-action="switchModel">🧍 换模型</button>
+        <div id="model-list" class="menu-sub hidden"></div>
+      </div>
+      <button data-action="settings">⚙ 设置</button>
       <button data-action="models">📁 打开模型文件夹</button>
       <button data-action="importAnim">📥 导入动作文件</button>
       <div class="sep"></div>
