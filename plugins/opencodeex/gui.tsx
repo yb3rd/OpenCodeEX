@@ -18,6 +18,7 @@ const WIDTH_KEY = "opencodeex.width"
 const HIDDEN_KEY = "opencodeex.hidden"
 const VOICE_KEY = "opencodeex.voice"
 const AVATAR_KEY = "opencodeex.avatar"
+const POS_KEY = "opencodeex.avatar.pos"
 
 const basename = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path
 
@@ -55,7 +56,8 @@ body.opencodeex-docked main{padding-left:var(--opencodeex-width,320px);box-sizin
 #opencodeex-menu .opencodeex-backdrop{pointer-events:auto}
 #opencodeex-menu .opencodeex-context{pointer-events:auto}
 #opencodeex-avatar{position:fixed;right:24px;bottom:24px;z-index:9990;width:220px;pointer-events:none;display:flex;flex-direction:column;align-items:stretch}
-.opencodeex-avatar-card{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:6px;width:220px}
+.opencodeex-avatar-card{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:6px;width:220px;cursor:grab;user-select:none;touch-action:none}
+.opencodeex-avatar-card:active{cursor:grabbing}
 .opencodeex-avatar-canvas{width:200px;height:220px;display:block;cursor:pointer}
 .opencodeex-bubble{max-width:220px;max-height:130px;overflow:auto;padding:8px 10px;border-radius:10px;background:var(--v2-background-bg-base,#1b1b1b);border:1px solid rgba(127,127,127,.25);font-size:12px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .opencodeex-avatar-actions{display:flex;gap:4px}
@@ -94,6 +96,7 @@ export default Plugin.define({
       dance: "Dance",
       hideAvatar: "Hide assistant",
       avatarCommand: "Toggle assistant",
+      dragHint: "Drag to move, double-click to reset",
       allHidden: "All projects are hidden",
       current: "Current project",
     },
@@ -120,6 +123,7 @@ export default Plugin.define({
       dance: "跳个舞",
       hideAvatar: "隐藏助手",
       avatarCommand: "显示/隐藏助手",
+      dragHint: "拖动移动位置，双击复位",
       allHidden: "项目都已隐藏",
       current: "当前项目",
     },
@@ -521,7 +525,7 @@ export default Plugin.define({
     const startResize = (event: PointerEvent) => {
       event.preventDefault()
       resizing = true
-      ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+      ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
     }
     const moveResize = (event: PointerEvent) => {
       if (!resizing) return
@@ -636,6 +640,91 @@ export default Plugin.define({
     const [bubble, setBubble] = createSignal("")
     const [voiceOn, setVoiceOn] = createSignal(localStorage.getItem(VOICE_KEY) !== "0")
     const [avatarOn, setAvatarOn] = createSignal(localStorage.getItem(AVATAR_KEY) !== "0")
+
+    let avatarPos: { x: number; y: number } | null = (() => {
+      try {
+        const raw = localStorage.getItem(POS_KEY)
+        if (!raw) return null
+        const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown }
+        return typeof parsed?.x === "number" && typeof parsed?.y === "number"
+          ? { x: parsed.x, y: parsed.y }
+          : null
+      } catch {
+        return null
+      }
+    })()
+
+    let suppressClick = false
+
+    const viewport = () => {
+      const dpr = window.devicePixelRatio || 1
+      const screen = window.screen
+      const availW = screen.width > window.innerWidth * 1.1 ? screen.width / dpr : screen.width
+      const availH = screen.height > window.innerHeight * 1.1 ? screen.height / dpr : screen.height
+      return {
+        left: Math.max(0, -window.screenX),
+        top: Math.max(0, -window.screenY),
+        right: Math.min(window.innerWidth, availW - window.screenX),
+        bottom: Math.min(window.innerHeight, availH - window.screenY),
+      }
+    }
+
+    const dragAvatar = {
+      active: null as null | { startX: number; startY: number; originX: number; originY: number; moved: boolean },
+    }
+
+    const onAvatarDown = (event: PointerEvent) => {
+      if ((event.target as HTMLElement).closest("button")) return
+      const rect = avatarHost.getBoundingClientRect()
+      dragAvatar.active = {
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: rect.left,
+        originY: rect.top,
+        moved: false,
+      }
+      ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+    }
+
+    const onAvatarMove = (event: PointerEvent) => {
+      const drag = dragAvatar.active
+      if (!drag) return
+      const dx = event.clientX - drag.startX
+      const dy = event.clientY - drag.startY
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return
+      drag.moved = true
+
+      const area = viewport()
+      const width = avatarHost.offsetWidth || 220
+      const height = avatarHost.offsetHeight || 252
+      const x = Math.min(Math.max(drag.originX + dx, area.left + 8), Math.max(area.left + 8, area.right - width - 8))
+      const y = Math.min(Math.max(drag.originY + dy, area.top + 8), Math.max(area.top + 8, area.bottom - height - 8))
+
+      avatarHost.style.left = `${x}px`
+      avatarHost.style.top = `${y}px`
+      avatarHost.style.right = "auto"
+      avatarHost.style.bottom = "auto"
+    }
+
+    const onAvatarUp = (event: PointerEvent) => {
+      const drag = dragAvatar.active
+      if (!drag) return
+      dragAvatar.active = null
+      ;(event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId)
+      if (!drag.moved) return
+
+      suppressClick = true
+      setTimeout(() => (suppressClick = false), 80)
+      const rect = avatarHost.getBoundingClientRect()
+      avatarPos = { x: rect.left, y: rect.top }
+      localStorage.setItem(POS_KEY, JSON.stringify(avatarPos))
+    }
+
+    const resetAvatarPos = () => {
+      avatarPos = null
+      localStorage.removeItem(POS_KEY)
+      place()
+    }
 
     let playAction: ((pose: Pose) => void) | undefined
 
@@ -874,6 +963,7 @@ export default Plugin.define({
           ref={canvas}
           class="opencodeex-avatar-canvas"
           onClick={() => {
+            if (suppressClick) return
             if ("speechSynthesis" in window) speechSynthesis.resume()
             playAction?.(randomPose())
           }}
@@ -885,7 +975,16 @@ export default Plugin.define({
     avatarHost.id = "opencodeex-avatar"
     const disposeAvatar = render(
       () => (
-        <div class="opencodeex-avatar-card" style={{ display: avatarOn() ? "flex" : "none" }}>
+        <div
+          class="opencodeex-avatar-card"
+          style={{ display: avatarOn() ? "flex" : "none" }}
+          title={ctx.t("dragHint")}
+          onPointerDown={onAvatarDown}
+          onPointerMove={onAvatarMove}
+          onPointerUp={onAvatarUp}
+          onPointerCancel={onAvatarUp}
+          onDblClick={resetAvatarPos}
+        >
           <Show when={bubble()}>
             <div class="opencodeex-bubble">{bubble()}</div>
           </Show>
@@ -927,15 +1026,24 @@ export default Plugin.define({
       const main = document.querySelector("main")
       host.style.top = `${main ? Math.round(main.getBoundingClientRect().top) : 44}px`
 
-      // 窗口可能比屏幕大（右/下超出），把助手拉回可见区域
-      const dpr = window.devicePixelRatio || 1
-      const screen = window.screen
-      const availW = screen.width > window.innerWidth * 1.1 ? screen.width / dpr : screen.width
-      const availH = screen.height > window.innerHeight * 1.1 ? screen.height / dpr : screen.height
-      const visibleW = Math.max(0, Math.min(window.innerWidth, availW - window.screenX))
-      const visibleH = Math.max(0, Math.min(window.innerHeight, availH - window.screenY))
-      avatarHost.style.right = `${24 + Math.max(0, window.innerWidth - visibleW)}px`
-      avatarHost.style.bottom = `${24 + Math.max(0, window.innerHeight - visibleH)}px`
+      const area = viewport()
+      const width = avatarHost.offsetWidth || 220
+      const height = avatarHost.offsetHeight || 252
+
+      if (avatarPos) {
+        const x = Math.min(Math.max(avatarPos.x, area.left + 8), Math.max(area.left + 8, area.right - width - 8))
+        const y = Math.min(Math.max(avatarPos.y, area.top + 8), Math.max(area.top + 8, area.bottom - height - 8))
+        avatarHost.style.left = `${x}px`
+        avatarHost.style.top = `${y}px`
+        avatarHost.style.right = "auto"
+        avatarHost.style.bottom = "auto"
+        return
+      }
+
+      avatarHost.style.left = "auto"
+      avatarHost.style.top = "auto"
+      avatarHost.style.right = `${24 + Math.max(0, window.innerWidth - area.right)}px`
+      avatarHost.style.bottom = `${24 + Math.max(0, window.innerHeight - area.bottom)}px`
     }
 
     const apply = () => {
@@ -997,6 +1105,7 @@ export default Plugin.define({
     })
 
     const toggle = () => setOpen((v) => !v)
+
 
     ctx.add(
       TitlebarItem,
