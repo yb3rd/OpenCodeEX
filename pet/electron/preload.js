@@ -4,6 +4,10 @@ contextBridge.exposeInMainWorld("pet", {
   dragStart: (offset) => ipcRenderer.send("pet:drag-start", offset),
   dragEnd: () => ipcRenderer.send("pet:drag-end"),
   wander: () => ipcRenderer.send("pet:wander"),
+  onWalk: (callback) => {
+    ipcRenderer.on("pet:walk", (_event, data) => callback(data))
+  },
+  setZones: (zones) => ipcRenderer.send("pet:zones", zones),
   chat: (text, history, model) => ipcRenderer.invoke("pet:chat", { text, history, model }),
   models: () => ipcRenderer.invoke("pet:models"),
   speak: (text, voice, options) => ipcRenderer.invoke("pet:speak", { text, voice, ...options }),

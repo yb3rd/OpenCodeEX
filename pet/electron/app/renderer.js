@@ -47,8 +47,8 @@ try {
   const height = size.y || 1.5
   const minY = box.min.y || 0
 
-  camera.position.set(0, minY + height * 0.5, height * 2.1)
-  camera.lookAt(0, minY + height * 0.5, 0)
+  camera.position.set(0, minY + height * 0.58, height * 2.4)
+  camera.lookAt(0, minY + height * 0.58, 0)
 
   vrm.scene.traverse((object) => {
     if (object.isMesh) object.frustumCulled = false
@@ -78,11 +78,13 @@ let mouthTimer = 0
 let mouthIndex = 0
 let nextIdle = performance.now() + 5000
 let nextWander = performance.now() + 15000
+let walking = false
+let walkDir = 1
 const visemes = ["aa", "ih", "ou", "ee", "oh"]
 
 const restRotations = new Map()
 if (vrm) {
-  for (const name of ["head", "rightUpperArm", "leftUpperArm"]) {
+  for (const name of ["head", "rightUpperArm", "leftUpperArm", "leftUpperLeg", "rightUpperLeg"]) {
     const node = vrm.humanoid?.getNormalizedBoneNode(name)
     if (node) restRotations.set(name, node.rotation.clone())
   }
@@ -320,6 +322,8 @@ function createDropdown(root, options, value, onChange) {
   trigger.addEventListener("click", (event) => {
     event.stopPropagation()
     closeAllDropdowns(list)
+    const rect = trigger.getBoundingClientRect()
+    list.classList.toggle("up", window.innerHeight - rect.bottom < 260)
     list.classList.toggle("hidden")
   })
 
@@ -441,6 +445,12 @@ menu.addEventListener("click", (event) => {
 })
 
 sendButton.addEventListener("click", () => void sendPrompt())
+document.getElementById("composer-close").addEventListener("click", () => composer.classList.add("hidden"))
+
+window.pet?.onWalk((data) => {
+  walking = Boolean(data?.dir)
+  if (data?.dir) walkDir = data.dir
+})
 promptInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault()
@@ -451,6 +461,42 @@ promptInput.addEventListener("keydown", (event) => {
 })
 
 let dragging = false
+
+let lastInteractive = null
+
+function publishZones() {
+  const zones = []
+  const canvasRect = canvas.getBoundingClientRect()
+  zones.push({
+    x: canvasRect.left + 55,
+    y: canvasRect.top,
+    w: canvasRect.width - 110,
+    h: canvasRect.height,
+  })
+
+  const dragBar = document.querySelector(".drag")
+  if (dragBar) {
+    const rect = dragBar.getBoundingClientRect()
+    zones.push({ x: rect.left + rect.width / 2 - 100, y: rect.top, w: 200, h: rect.height })
+  }
+
+  if (!bubble.classList.contains("hidden")) {
+    const rect = bubble.getBoundingClientRect()
+    zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+  }
+
+  for (const element of [composer, menu, settings]) {
+    if (!element.classList.contains("hidden")) {
+      const rect = element.getBoundingClientRect()
+      zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+    }
+  }
+
+  window.pet?.setZones(zones)
+}
+
+setInterval(publishZones, 300)
+publishZones()
 
 window.addEventListener("mousedown", (event) => {
   if (!event.target.closest(".dd")) closeAllDropdowns()
@@ -509,23 +555,36 @@ function animate() {
 
   if (vrm) {
     vrm.scene.position.y = 0
-    vrm.scene.rotation.y = 0
 
-    addBoneRotation("head", 0, 0, 0)
-    addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
-    addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
+    const targetYaw = walking ? walkDir * (Math.PI / 2) : 0
+    vrm.scene.rotation.y += (targetYaw - vrm.scene.rotation.y) * Math.min(1, delta * 8)
 
-    if (pose === "wave") {
-      addBoneRotation("rightUpperArm", 0, 0, -1.5 + Math.sin(elapsed * 9) * 0.25)
-    } else if (pose === "dance") {
-      addBoneRotation("rightUpperArm", 0, 0, 0.4 + Math.sin(elapsed * 6.4) * 0.7)
-      addBoneRotation("leftUpperArm", 0, 0, -0.4 - Math.sin(elapsed * 6.4) * 0.7)
-      addBoneRotation("head", 0, Math.sin(elapsed * 3.2) * 0.12, Math.sin(elapsed * 3.2) * 0.06)
-    } else if (pose === "talk") {
-      addBoneRotation("head", Math.sin(elapsed * 6) * 0.05, 0, 0)
-      addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
-    } else if (pose === "look") {
-      addBoneRotation("head", 0, Math.sin(elapsed * 2.2) * 0.45, 0)
+    if (walking) {
+      const phase = time * 8
+      addBoneRotation("leftUpperLeg", Math.sin(phase) * 0.45, 0, 0)
+      addBoneRotation("rightUpperLeg", -Math.sin(phase) * 0.45, 0, 0)
+      addBoneRotation("rightUpperArm", Math.sin(phase) * 0.4, 0, 1.05)
+      addBoneRotation("leftUpperArm", -Math.sin(phase) * 0.4, 0, -1.05)
+      addBoneRotation("head", 0, 0, 0)
+    } else {
+      addBoneRotation("leftUpperLeg", 0, 0, 0)
+      addBoneRotation("rightUpperLeg", 0, 0, 0)
+      addBoneRotation("head", 0, 0, 0)
+      addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
+      addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
+
+      if (pose === "wave") {
+        addBoneRotation("rightUpperArm", 0, 0, -1.5 + Math.sin(elapsed * 9) * 0.25)
+      } else if (pose === "dance") {
+        addBoneRotation("rightUpperArm", 0, 0, 0.4 + Math.sin(elapsed * 6.4) * 0.7)
+        addBoneRotation("leftUpperArm", 0, 0, -0.4 - Math.sin(elapsed * 6.4) * 0.7)
+        addBoneRotation("head", 0, Math.sin(elapsed * 3.2) * 0.12, Math.sin(elapsed * 3.2) * 0.06)
+      } else if (pose === "talk") {
+        addBoneRotation("head", Math.sin(elapsed * 6) * 0.05, 0, 0)
+        addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
+      } else if (pose === "look") {
+        addBoneRotation("head", 0, Math.sin(elapsed * 2.2) * 0.45, 0)
+      }
     }
 
     if (time > nextBlink) {

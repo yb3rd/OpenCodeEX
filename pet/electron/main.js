@@ -5,6 +5,10 @@ const fs = require("fs")
 const os = require("os")
 
 let win = null
+let zones = []
+let dragTimer = null
+let dragOffset = { x: 0, y: 0 }
+let wanderTimer = null
 
 function readService() {
   try {
@@ -85,20 +89,7 @@ ipcMain.handle("pet:speak", async (_event, payload) => {
     await new Promise((resolve, reject) => {
       execFile(
         "python",
-        [
-          "-m",
-          "edge_tts",
-          "--voice",
-          voice,
-          "--rate",
-          rate,
-          "--pitch",
-          pitch,
-          "--text",
-          text,
-          "--write-media",
-          file,
-        ],
+        ["-m", "edge_tts", "--voice", voice, "--rate", rate, "--pitch", pitch, "--text", text, "--write-media", file],
         { timeout: 25000 },
         (error) => (error ? reject(error) : resolve()),
       )
@@ -113,6 +104,86 @@ ipcMain.handle("pet:speak", async (_event, payload) => {
     } catch {}
   }
 })
+
+ipcMain.on("pet:zones", (_event, next) => {
+  zones = Array.isArray(next) ? next : []
+})
+
+ipcMain.on("pet:drag-start", (_event, offset) => {
+  if (!offset || typeof offset.x !== "number" || typeof offset.y !== "number") return
+  dragOffset = offset
+  if (dragTimer) clearInterval(dragTimer)
+  dragTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) return
+    const point = screen.getCursorScreenPoint()
+    win.setPosition(Math.round(point.x - dragOffset.x), Math.round(point.y - dragOffset.y))
+  }, 16)
+})
+
+ipcMain.on("pet:drag-end", () => {
+  if (dragTimer) clearInterval(dragTimer)
+  dragTimer = null
+})
+
+ipcMain.on("pet:wander", () => {
+  if (!win || win.isDestroyed() || wanderTimer) return
+  const display = screen.getPrimaryDisplay()
+  const scale = display.scaleFactor || 1
+  const area = display.workArea
+  const [x, y] = win.getPosition()
+  const [width] = win.getSize()
+
+  const maxX = Math.round((area.x + area.width) / scale - width - 16)
+  const minX = 16
+  let targetX = x + (Math.random() < 0.5 ? -1 : 1) * Math.round(120 + Math.random() * 200)
+  targetX = Math.max(minX, Math.min(maxX, targetX))
+  if (Math.abs(targetX - x) < 40) {
+    targetX = x < (minX + maxX) / 2 ? maxX : minX
+  }
+  const dir = targetX > x ? 1 : -1
+
+  win.webContents.send("pet:walk", { dir })
+
+  const steps = 45
+  let step = 0
+  wanderTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) {
+      clearInterval(wanderTimer)
+      wanderTimer = null
+      return
+    }
+    step += 1
+    const t = step / steps
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+    win.setPosition(Math.round(x + (targetX - x) * ease), y)
+    if (step >= steps) {
+      clearInterval(wanderTimer)
+      wanderTimer = null
+      win.webContents.send("pet:walk", { dir: 0 })
+    }
+  }, 30)
+})
+
+ipcMain.on("pet:quit", () => app.quit())
+
+function startHitTest() {
+  let lastInside = null
+  setInterval(() => {
+    if (!win || win.isDestroyed()) return
+    const bounds = win.getBounds()
+    const scale = screen.getPrimaryDisplay().scaleFactor || 1
+    const point = screen.getCursorScreenPoint()
+    const x = point.x / scale - bounds.x
+    const y = point.y / scale - bounds.y
+    const inside = zones.some(
+      (zone) => x >= zone.x && x <= zone.x + zone.w && y >= zone.y && y <= zone.y + zone.h,
+    )
+    if (inside !== lastInside) {
+      lastInside = inside
+      win.setIgnoreMouseEvents(!inside, { forward: true })
+    }
+  }, 60)
+}
 
 function createWindow() {
   const display = screen.getPrimaryDisplay()
@@ -143,6 +214,7 @@ function createWindow() {
   })
 
   win.setAlwaysOnTop(true, "screen-saver")
+  win.setIgnoreMouseEvents(true, { forward: true })
   win.setBounds({ x, y, width, height })
   win.loadFile(path.join(__dirname, "dist", "index.html"))
 
@@ -164,65 +236,8 @@ function createWindow() {
   }, 3000)
 
   win.on("closed", () => (win = null))
+  startHitTest()
 }
-
-let dragTimer = null
-let dragOffset = { x: 0, y: 0 }
-
-ipcMain.on("pet:drag-start", (_event, offset) => {
-  if (!offset || typeof offset.x !== "number" || typeof offset.y !== "number") return
-  dragOffset = offset
-  if (dragTimer) clearInterval(dragTimer)
-  dragTimer = setInterval(() => {
-    if (!win || win.isDestroyed()) return
-    const point = screen.getCursorScreenPoint()
-    win.setPosition(Math.round(point.x - dragOffset.x), Math.round(point.y - dragOffset.y))
-  }, 16)
-})
-
-ipcMain.on("pet:drag-end", () => {
-  if (dragTimer) clearInterval(dragTimer)
-  dragTimer = null
-})
-
-let wanderTimer = null
-
-ipcMain.on("pet:wander", () => {
-  if (!win || win.isDestroyed() || wanderTimer) return
-  const display = screen.getPrimaryDisplay()
-  const scale = display.scaleFactor || 1
-  const area = display.workArea
-  const [x, y] = win.getPosition()
-  const [width, height] = win.getSize()
-
-  const maxX = Math.round((area.x + area.width) / scale - width - 16)
-  const maxY = Math.round((area.y + area.height) / scale - height - 16)
-  const targetX = Math.max(16, Math.min(maxX, x + Math.round((Math.random() - 0.5) * 280)))
-  const targetY = Math.max(16, Math.min(maxY, y + Math.round((Math.random() - 0.5) * 180)))
-
-  const steps = 40
-  let step = 0
-  wanderTimer = setInterval(() => {
-    if (!win || win.isDestroyed()) {
-      clearInterval(wanderTimer)
-      wanderTimer = null
-      return
-    }
-    step += 1
-    const t = step / steps
-    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-    win.setPosition(
-      Math.round(x + (targetX - x) * ease),
-      Math.round(y + (targetY - y) * ease),
-    )
-    if (step >= steps) {
-      clearInterval(wanderTimer)
-      wanderTimer = null
-    }
-  }, 30)
-})
-
-ipcMain.on("pet:quit", () => app.quit())
 
 app.whenReady().then(createWindow)
 app.on("window-all-closed", () => app.quit())
