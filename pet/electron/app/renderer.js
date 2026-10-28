@@ -91,20 +91,6 @@ try {
   }
 }
 
-const poses = {
-  idle: Number.POSITIVE_INFINITY,
-  talk: 3,
-  wave: 2.2,
-  dance: 4.5,
-  look: 2.6,
-  stretch: 2.8,
-  bow: 2.0,
-  clap: 2.4,
-  hips: 2.6,
-}
-
-let pose = "idle"
-let poseStarted = performance.now()
 let speaking = false
 let lastText = ""
 let hiddenAt = 0
@@ -112,16 +98,7 @@ let nextBlink = 2
 let blinkUntil = 0
 let mouthTimer = 0
 let mouthIndex = 0
-let nextIdle = performance.now() + 5000
-let nextWander = performance.now() + 15000
-let walking = false
-let walkDir = 1
 const visemes = ["aa", "ih", "ou", "ee", "oh"]
-
-function setPose(next) {
-  pose = next
-  poseStarted = performance.now()
-}
 
 function addBoneRotation(name, x, y, z) {
   const node = vrm?.humanoid?.getNormalizedBoneNode(name)
@@ -223,7 +200,6 @@ function toggleVoice() {
 function testVoice() {
   const text = lastText || "你好，我是 OpenCode 桌面宠物，语音测试正常。"
   showBubble(text)
-  setPose("talk")
   speak(text, true)
 }
 
@@ -269,7 +245,6 @@ async function sendPrompt() {
   saveHistory()
   lastText = cleanText(result.text)
   showBubble(lastText)
-  setPose("talk")
   speak(lastText)
 }
 
@@ -504,7 +479,6 @@ menu.addEventListener("click", (event) => {
   if (action === "compose") openComposer()
   else if (action === "voice") testVoice()
   else if (action === "mute") toggleVoice()
-  else if (action === "dance") setPose("dance")
   else if (action === "settings") void openSettings()
   else if (action === "models") void window.pet?.openModels()
   else if (action === "quit") window.pet?.quit()
@@ -513,10 +487,6 @@ menu.addEventListener("click", (event) => {
 sendButton.addEventListener("click", () => void sendPrompt())
 document.getElementById("composer-close").addEventListener("click", () => composer.classList.add("hidden"))
 
-window.pet?.onWalk((data) => {
-  walking = Boolean(data?.dir)
-  if (data?.dir) walkDir = data.dir
-})
 promptInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault()
@@ -596,14 +566,7 @@ const clock = new THREE.Clock()
 function animate() {
   const delta = clock.getDelta()
   const time = clock.elapsedTime
-  const elapsed = (performance.now() - poseStarted) / 1000
 
-  if (pose !== "idle" && elapsed > poses[pose]) setPose("idle")
-  if (pose === "idle" && !speaking && performance.now() > nextIdle) {
-    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips"]
-    setPose(actions[Math.floor(Math.random() * actions.length)])
-    nextIdle = performance.now() + 8000 + Math.random() * 8000
-  }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
     hiddenAt = 0
@@ -616,39 +579,9 @@ function animate() {
 
     addBoneRotation("leftUpperLeg", 0, 0, 0)
     addBoneRotation("rightUpperLeg", 0, 0, 0)
-    addBoneRotation("head", 0, 0, 0)
+    addBoneRotation("head", Math.sin(time * 1.2) * 0.015, 0, 0)
     addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
     addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
-
-    if (pose === "wave") {
-        addBoneRotation("rightUpperArm", 0, 0, -1.5 + Math.sin(elapsed * 9) * 0.25)
-      } else if (pose === "dance") {
-        addBoneRotation("rightUpperArm", 0, 0, 0.4 + Math.sin(elapsed * 6.4) * 0.7)
-        addBoneRotation("leftUpperArm", 0, 0, -0.4 - Math.sin(elapsed * 6.4) * 0.7)
-        addBoneRotation("head", 0, Math.sin(elapsed * 3.2) * 0.12, Math.sin(elapsed * 3.2) * 0.06)
-      } else if (pose === "talk") {
-        addBoneRotation("head", Math.sin(elapsed * 6) * 0.05, 0, 0)
-        addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
-      } else if (pose === "look") {
-        addBoneRotation("head", 0, Math.sin(elapsed * 2.2) * 0.45, 0)
-      } else if (pose === "stretch") {
-        addBoneRotation("rightUpperArm", 0, 0, -2.15 + Math.sin(elapsed * 3) * 0.06)
-        addBoneRotation("leftUpperArm", 0, 0, 2.15 - Math.sin(elapsed * 3) * 0.06)
-        addBoneRotation("head", -0.12, 0, 0)
-      } else if (pose === "bow") {
-        addBoneRotation("head", 0.42, 0, 0)
-        addBoneRotation("rightUpperArm", -0.25, 0, 1.0)
-        addBoneRotation("leftUpperArm", -0.25, 0, -1.0)
-      } else if (pose === "clap") {
-        const beat = Math.abs(Math.sin(elapsed * 6.5))
-        addBoneRotation("rightUpperArm", -0.55, 0, 0.42 + beat * 0.18)
-        addBoneRotation("leftUpperArm", -0.55, 0, -0.42 - beat * 0.18)
-        addBoneRotation("head", 0, 0, Math.sin(elapsed * 3) * 0.04)
-      } else if (pose === "hips") {
-        addBoneRotation("rightUpperArm", 0, 0, 1.6 + Math.sin(elapsed * 3) * 0.05)
-        addBoneRotation("leftUpperArm", 0, 0, -1.6 - Math.sin(elapsed * 3) * 0.05)
-        addBoneRotation("head", 0, Math.sin(elapsed * 2.5) * 0.18, 0)
-      }
 
     if (time > nextBlink) {
       blinkUntil = time + 0.12
