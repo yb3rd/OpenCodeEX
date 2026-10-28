@@ -657,6 +657,10 @@ export default Plugin.define({
     let suppressClick = false
 
     const viewport = () => {
+      const sane = (value: number) => Number.isFinite(value) && value > -1000
+      if (!sane(window.screenX) || !sane(window.screenY)) {
+        return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+      }
       const dpr = window.devicePixelRatio || 1
       const screen = window.screen
       const availW = screen.width > window.innerWidth * 1.1 ? screen.width / dpr : screen.width
@@ -716,7 +720,7 @@ export default Plugin.define({
       suppressClick = true
       setTimeout(() => (suppressClick = false), 80)
       const rect = avatarHost.getBoundingClientRect()
-      avatarPos = { x: rect.left, y: rect.top }
+      avatarPos = { x: Math.round(rect.left), y: Math.round(rect.top) }
       localStorage.setItem(POS_KEY, JSON.stringify(avatarPos))
     }
 
@@ -742,6 +746,7 @@ export default Plugin.define({
     const speak = (text: string) => {
       if (!("speechSynthesis" in window)) return
       speechSynthesis.cancel()
+      speechSynthesis.resume()
       const utterance = new SpeechSynthesisUtterance(text.slice(0, 400))
       utterance.lang = "zh-CN"
       utterance.rate = 1.05
@@ -751,6 +756,7 @@ export default Plugin.define({
         voices.find((item) => item.lang.toLowerCase().startsWith("zh")) ?? voices.find((item) => item.default)
       if (voice) utterance.voice = voice
       utterance.onstart = () => playAction?.("talk")
+      utterance.onerror = (event) => console.error(`[opencodeex] speak failed: ${event.error}`)
       speechSynthesis.speak(utterance)
     }
 
@@ -1068,6 +1074,7 @@ export default Plugin.define({
       apply()
       place()
       window.addEventListener("resize", place)
+      window.addEventListener("focus", place)
       document.addEventListener("contextmenu", onContextMenu, true)
       document.addEventListener("keydown", onEscape)
     })
@@ -1090,6 +1097,7 @@ export default Plugin.define({
 
     onCleanup(() => {
       window.removeEventListener("resize", place)
+      window.removeEventListener("focus", place)
       document.removeEventListener("contextmenu", onContextMenu, true)
       document.removeEventListener("keydown", onEscape)
       document.body.classList.remove("opencodeex-docked")
@@ -1105,6 +1113,7 @@ export default Plugin.define({
     })
 
     const toggle = () => setOpen((v) => !v)
+
 
 
     ctx.add(

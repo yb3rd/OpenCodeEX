@@ -98,6 +98,8 @@ git fetch upstream && git rebase upstream/dev
 - 窗口比屏幕大时自动拉回可见区域
 - `Ctrl+Alt+A` 或命令面板「显示/隐藏助手」
 
+> 没声音时先看 Windows 音量合成器里 OpenCode 的音量，以及助手左下角的 🔊 按钮；语音使用系统 TTS，中文优先选 Microsoft Huihui 等嗓音。
+
 动作目前是程序化生成的（idle / talk / wave / dance / turn）。如果要播放模型自带的动画，需要提供带动画的 `.glb/.vrm` 文件。
 
 切换显示：
