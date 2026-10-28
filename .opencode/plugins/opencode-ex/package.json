@@ -1,0 +1,16 @@
+{
+  "name": "opencode-ex",
+  "version": "0.1.0",
+  "description": "OpenCodeEX 的个人定制插件：笔记工具 + 扩展示例",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}

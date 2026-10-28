@@ -1,0 +1,12 @@
+{
+  // OpenCode 项目配置。完整字段见 https://opencode.ai/v2/docs/config
+  "$schema": "https://opencode.ai/config.json"
+
+  // .opencode/ 下的 agents / commands / skills / plugins 会自动发现，
+  // 不需要在这里逐个注册。只有引用外部插件时才用 "plugins" 数组，例如：
+  //
+  // "plugins": [
+  //   "opencode-ex@0.1.0",
+  //   { "package": "./plugins/local", "options": { "strict": true } }
+  // ]
+}
