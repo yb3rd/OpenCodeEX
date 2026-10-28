@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, shell } = require("electron")
+const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require("electron")
 const { execFile } = require("child_process")
 const path = require("path")
 const fs = require("fs")
@@ -92,6 +92,42 @@ ipcMain.handle("pet:list-models", async () => {
     }
   } catch {}
   return list
+})
+
+ipcMain.handle("pet:list-animations", async () => {
+  const dir = path.join(__dirname, "animations")
+  const list = []
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+    for (const file of fs.readdirSync(dir)) {
+      if (/\.vrma$/i.test(file)) {
+        list.push({
+          name: file.replace(/\.vrma$/i, ""),
+          url: "file://" + path.join(dir, file).replace(/\\/g, "/"),
+        })
+      }
+    }
+  } catch {}
+  return list
+})
+
+ipcMain.handle("pet:pick-animation", async () => {
+  try {
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择 VRMA 动作文件",
+      filters: [{ name: "VRM Animation", extensions: ["vrma"] }],
+      properties: ["openFile"],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    const source = result.filePaths[0]
+    const dir = path.join(__dirname, "animations")
+    fs.mkdirSync(dir, { recursive: true })
+    const dest = path.join(dir, path.basename(source))
+    fs.copyFileSync(source, dest)
+    return { name: path.basename(source, ".vrma"), url: "file://" + dest.replace(/\\/g, "/") }
+  } catch (error) {
+    return null
+  }
 })
 
 ipcMain.handle("pet:open-models", async () => {

@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("pet", {
   chat: (text, history, model) => ipcRenderer.invoke("pet:chat", { text, history, model }),
   models: () => ipcRenderer.invoke("pet:models"),
   listModels: () => ipcRenderer.invoke("pet:list-models"),
+  listAnimations: () => ipcRenderer.invoke("pet:list-animations"),
+  pickAnimation: () => ipcRenderer.invoke("pet:pick-animation"),
   openModels: () => ipcRenderer.invoke("pet:open-models"),
   speak: (text, voice, options) => ipcRenderer.invoke("pet:speak", { text, voice, ...options }),
   quit: () => ipcRenderer.send("pet:quit"),

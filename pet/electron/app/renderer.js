@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm"
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation"
 
 const canvas = document.getElementById("view")
 const bubble = document.getElementById("bubble")
@@ -11,6 +12,7 @@ const settings = document.getElementById("settings")
 const ddMode = document.getElementById("dd-mode")
 const ddModel = document.getElementById("dd-model")
 const ddModelFile = document.getElementById("dd-modelFile")
+const ddAnim = document.getElementById("dd-anim")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
@@ -35,13 +37,19 @@ scene.add(rimLight)
 
 const loader = new GLTFLoader()
 loader.register((parser) => new VRMLoaderPlugin(parser))
+loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 
 let vrm = null
+let mixer = null
 let armSign = 1
 let baseYaw = 0
 const restRotations = new Map()
 
 async function loadModel(url) {
+  if (mixer) {
+    mixer.stopAllAction()
+    mixer = null
+  }
   if (vrm) {
     scene.remove(vrm.scene)
     try {
@@ -73,12 +81,29 @@ async function loadModel(url) {
     if (object.isMesh) object.frustumCulled = false
   })
 
-  for (const name of ["head", "rightUpperArm", "leftUpperArm", "leftUpperLeg", "rightUpperLeg"]) {
+  for (const name of ["head", "rightUpperArm", "leftUpperArm", "rightLowerArm", "leftLowerArm", "leftUpperLeg", "rightUpperLeg"]) {
     const node = vrm.humanoid?.getNormalizedBoneNode(name)
     if (node) restRotations.set(name, node.rotation.clone())
   }
 
   console.log(`VRM loaded: ${url}`)
+}
+
+async function playAnimation(url) {
+  if (mixer) {
+    mixer.stopAllAction()
+    try {
+      mixer.uncacheRoot(vrm.scene)
+    } catch {}
+    mixer = null
+  }
+  if (!url || !vrm) return
+  const gltf = await loader.loadAsync(url)
+  const animations = gltf.userData.vrmAnimations
+  if (!animations?.length) return
+  const clip = createVRMAnimationClip(animations[0], vrm)
+  mixer = new THREE.AnimationMixer(vrm.scene)
+  mixer.clipAction(clip).play()
 }
 
 const savedModelUrl = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
@@ -99,6 +124,7 @@ let blinkUntil = 0
 let mouthTimer = 0
 let mouthIndex = 0
 const visemes = ["aa", "ih", "ou", "ee", "oh"]
+
 
 function addBoneRotation(name, x, y, z) {
   const node = vrm?.humanoid?.getNormalizedBoneNode(name)
@@ -395,6 +421,19 @@ async function loadModelList() {
   }
 }
 
+const animDropdown = createDropdown(ddAnim, [{ value: "", label: "无（自然站立）" }], "", (url) => {
+  void playAnimation(url)
+})
+
+async function loadAnimationList() {
+  const list = (await window.pet?.listAnimations()) || []
+  const options = [
+    { value: "", label: "无（自然站立）" },
+    ...list.map((item) => ({ value: item.url, label: item.name })),
+  ]
+  animDropdown.setOptions(options)
+}
+
 const voiceDropdown = createDropdown(
   ddVoice,
   voiceOptions,
@@ -446,6 +485,7 @@ async function openSettings() {
   if (!models.length) models = (await window.pet?.models()) || []
   fillModels()
   void loadModelList()
+  void loadAnimationList()
 }
 
 function refreshMenu() {
@@ -481,6 +521,16 @@ menu.addEventListener("click", (event) => {
   else if (action === "mute") toggleVoice()
   else if (action === "settings") void openSettings()
   else if (action === "models") void window.pet?.openModels()
+  else if (action === "importAnim") {
+    void (async () => {
+      const picked = await window.pet?.pickAnimation()
+      if (!picked) return
+      await playAnimation(picked.url)
+      await loadAnimationList()
+      animDropdown.setValue(picked.url)
+      showBubble(`已导入动作：${picked.name}`)
+    })()
+  }
   else if (action === "quit") window.pet?.quit()
 })
 
@@ -577,11 +627,17 @@ function animate() {
 
     vrm.scene.rotation.y = baseYaw
 
+    if (mixer) {
+      mixer.update(delta)
+    } else {
     addBoneRotation("leftUpperLeg", 0, 0, 0)
     addBoneRotation("rightUpperLeg", 0, 0, 0)
     addBoneRotation("head", Math.sin(time * 1.2) * 0.015, 0, 0)
     addBoneRotation("rightUpperArm", 0, 0, 1.1 + Math.sin(time * 1.6) * 0.03)
     addBoneRotation("leftUpperArm", 0, 0, -1.1 - Math.sin(time * 1.6) * 0.03)
+    addBoneRotation("rightLowerArm", 0, 0, 0)
+    addBoneRotation("leftLowerArm", 0, 0, 0)
+    }
 
     if (time > nextBlink) {
       blinkUntil = time + 0.12
