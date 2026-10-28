@@ -65,6 +65,10 @@ const poses = {
   wave: 2.2,
   dance: 4.5,
   look: 2.6,
+  stretch: 2.8,
+  bow: 2.0,
+  clap: 2.4,
+  hips: 2.6,
 }
 
 let pose = "idle"
@@ -120,7 +124,7 @@ function showBubble(text) {
   hiddenAt = performance.now() + 20000
 }
 
-let voiceOn = localStorage.getItem("pet.voice.v2") !== "0"
+let voiceOn = localStorage.getItem("pet.voice.v3") !== "0"
 
 let audio = null
 
@@ -131,6 +135,7 @@ async function speak(text, force = false) {
     const rate = localStorage.getItem("pet.rate") || "+0%"
     const pitch = localStorage.getItem("pet.pitch") || "+0Hz"
     const result = await window.pet?.speak(text, voice, { rate, pitch })
+    if (!result?.ok) console.log(`[speak] failed: ${result?.error ?? "unknown"}`)
     if (result?.ok && result.audio) {
       try {
         if (audio) {
@@ -181,7 +186,7 @@ function speakSystem(text) {
 
 function toggleVoice() {
   voiceOn = !voiceOn
-  localStorage.setItem("pet.voice.v2", voiceOn ? "1" : "0")
+  localStorage.setItem("pet.voice.v3", voiceOn ? "1" : "0")
   if (!voiceOn) {
     speechSynthesis.cancel()
     audio?.pause()
@@ -365,7 +370,12 @@ const voiceDropdown = createDropdown(
   ddVoice,
   voiceOptions,
   localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural",
-  (value) => localStorage.setItem("pet.voiceName", value),
+  (value) => {
+    localStorage.setItem("pet.voiceName", value)
+    voiceOn = true
+    localStorage.setItem("pet.voice.v3", "1")
+    refreshMenu()
+  },
 )
 
 const rateDropdown = createDropdown(
@@ -534,7 +544,7 @@ function animate() {
 
   if (pose !== "idle" && elapsed > poses[pose]) setPose("idle")
   if (pose === "idle" && !speaking && performance.now() > nextIdle) {
-    const actions = ["wave", "dance", "talk", "look"]
+    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips"]
     setPose(actions[Math.floor(Math.random() * actions.length)])
     nextIdle = performance.now() + 8000 + Math.random() * 8000
   }
@@ -584,6 +594,23 @@ function animate() {
         addBoneRotation("rightUpperArm", 0, 0, 0.8 + Math.sin(elapsed * 3) * 0.1)
       } else if (pose === "look") {
         addBoneRotation("head", 0, Math.sin(elapsed * 2.2) * 0.45, 0)
+      } else if (pose === "stretch") {
+        addBoneRotation("rightUpperArm", 0, 0, -2.15 + Math.sin(elapsed * 3) * 0.06)
+        addBoneRotation("leftUpperArm", 0, 0, 2.15 - Math.sin(elapsed * 3) * 0.06)
+        addBoneRotation("head", -0.12, 0, 0)
+      } else if (pose === "bow") {
+        addBoneRotation("head", 0.42, 0, 0)
+        addBoneRotation("rightUpperArm", -0.25, 0, 1.0)
+        addBoneRotation("leftUpperArm", -0.25, 0, -1.0)
+      } else if (pose === "clap") {
+        const beat = Math.abs(Math.sin(elapsed * 6.5))
+        addBoneRotation("rightUpperArm", -0.55, 0, 0.42 + beat * 0.18)
+        addBoneRotation("leftUpperArm", -0.55, 0, -0.42 - beat * 0.18)
+        addBoneRotation("head", 0, 0, Math.sin(elapsed * 3) * 0.04)
+      } else if (pose === "hips") {
+        addBoneRotation("rightUpperArm", 0, 0, 1.6 + Math.sin(elapsed * 3) * 0.05)
+        addBoneRotation("leftUpperArm", 0, 0, -1.6 - Math.sin(elapsed * 3) * 0.05)
+        addBoneRotation("head", 0, Math.sin(elapsed * 2.5) * 0.18, 0)
       }
     }
 
@@ -614,3 +641,8 @@ function animate() {
 }
 
 animate()
+
+setTimeout(() => {
+  console.log(`voiceOn=${voiceOn}`)
+  document.getElementById("view").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+}, 3500)
