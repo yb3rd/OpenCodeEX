@@ -10,6 +10,7 @@ const sendButton = document.getElementById("send")
 const settings = document.getElementById("settings")
 const ddMode = document.getElementById("dd-mode")
 const ddModel = document.getElementById("dd-model")
+const ddModelFile = document.getElementById("dd-modelFile")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
@@ -35,9 +36,20 @@ scene.add(rimLight)
 const loader = new GLTFLoader()
 loader.register((parser) => new VRMLoaderPlugin(parser))
 
-let vrm
-try {
-  const gltf = await loader.loadAsync("./sample.vrm")
+let vrm = null
+const restRotations = new Map()
+
+async function loadModel(url) {
+  if (vrm) {
+    scene.remove(vrm.scene)
+    try {
+      VRMUtils.deepDispose(vrm.scene)
+    } catch {}
+    vrm = null
+  }
+  restRotations.clear()
+
+  const gltf = await loader.loadAsync(url)
   vrm = gltf.userData.vrm
   VRMUtils.rotateVRM0(vrm)
   scene.add(vrm.scene)
@@ -49,14 +61,28 @@ try {
 
   camera.position.set(0, minY + height * 0.58, height * 2.4)
   camera.lookAt(0, minY + height * 0.58, 0)
+  camera.updateProjectionMatrix()
 
   vrm.scene.traverse((object) => {
     if (object.isMesh) object.frustumCulled = false
   })
 
-  console.log(`VRM loaded: height=${height.toFixed(2)}`)
+  for (const name of ["head", "rightUpperArm", "leftUpperArm", "leftUpperLeg", "rightUpperLeg"]) {
+    const node = vrm.humanoid?.getNormalizedBoneNode(name)
+    if (node) restRotations.set(name, node.rotation.clone())
+  }
+
+  console.log(`VRM loaded: ${url}`)
+}
+
+const savedModelUrl = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
+try {
+  await loadModel(savedModelUrl)
 } catch (error) {
   console.error("VRM load failed", error)
+  if (savedModelUrl !== "./sample.vrm") {
+    await loadModel("./sample.vrm").catch(() => {})
+  }
 }
 
 const poses = {
@@ -64,6 +90,7 @@ const poses = {
   talk: 3,
   wave: 2.2,
   dance: 4.5,
+  danceLong: 12,
   look: 2.6,
   stretch: 2.8,
   bow: 2.0,
@@ -85,14 +112,6 @@ let nextWander = performance.now() + 15000
 let walking = false
 let walkDir = 1
 const visemes = ["aa", "ih", "ou", "ee", "oh"]
-
-const restRotations = new Map()
-if (vrm) {
-  for (const name of ["head", "rightUpperArm", "leftUpperArm", "leftUpperLeg", "rightUpperLeg"]) {
-    const node = vrm.humanoid?.getNormalizedBoneNode(name)
-    if (node) restRotations.set(name, node.rotation.clone())
-  }
-}
 
 function setPose(next) {
   pose = next
@@ -366,6 +385,35 @@ const modelDropdown = createDropdown(ddModel, [], "", (value) => {
   settingsHint.textContent = "已选择模型"
 })
 
+const modelFileDropdown = createDropdown(
+  ddModelFile,
+  [{ value: "./sample.vrm", label: "默认示例（Constraint）" }],
+  localStorage.getItem("pet.modelUrl") || "./sample.vrm",
+  async (url) => {
+    localStorage.setItem("pet.modelUrl", url)
+    settingsHint.textContent = "加载模型中…"
+    try {
+      await loadModel(url)
+      settingsHint.textContent = "已切换模型"
+    } catch {
+      settingsHint.textContent = "模型加载失败"
+    }
+  },
+)
+
+async function loadModelList() {
+  const list = (await window.pet?.listModels()) || []
+  const options = [
+    { value: "./sample.vrm", label: "默认示例（Constraint）" },
+    ...list.map((item) => ({ value: item.url, label: item.name })),
+  ]
+  modelFileDropdown.setOptions(options)
+  const saved = localStorage.getItem("pet.modelUrl")
+  if (saved && options.some((option) => option.value === saved)) {
+    modelFileDropdown.setValue(saved)
+  }
+}
+
 const voiceDropdown = createDropdown(
   ddVoice,
   voiceOptions,
@@ -416,6 +464,7 @@ async function openSettings() {
   if (settings.classList.contains("hidden")) return
   if (!models.length) models = (await window.pet?.models()) || []
   fillModels()
+  void loadModelList()
 }
 
 function refreshMenu() {
@@ -450,7 +499,9 @@ menu.addEventListener("click", (event) => {
   else if (action === "voice") testVoice()
   else if (action === "mute") toggleVoice()
   else if (action === "dance") setPose("dance")
+  else if (action === "danceLong") setPose("danceLong")
   else if (action === "settings") void openSettings()
+  else if (action === "models") void window.pet?.openModels()
   else if (action === "quit") window.pet?.quit()
 })
 
@@ -544,7 +595,7 @@ function animate() {
 
   if (pose !== "idle" && elapsed > poses[pose]) setPose("idle")
   if (pose === "idle" && !speaking && performance.now() > nextIdle) {
-    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips"]
+    const actions = ["wave", "dance", "talk", "look", "stretch", "bow", "clap", "hips", "danceLong"]
     setPose(actions[Math.floor(Math.random() * actions.length)])
     nextIdle = performance.now() + 8000 + Math.random() * 8000
   }
@@ -611,6 +662,27 @@ function animate() {
         addBoneRotation("rightUpperArm", 0, 0, 1.6 + Math.sin(elapsed * 3) * 0.05)
         addBoneRotation("leftUpperArm", 0, 0, -1.6 - Math.sin(elapsed * 3) * 0.05)
         addBoneRotation("head", 0, Math.sin(elapsed * 2.5) * 0.18, 0)
+      } else if (pose === "danceLong") {
+        const phase = elapsed % 12
+        if (phase < 3) {
+          addBoneRotation("rightUpperArm", 0, 0, -1.2 + Math.sin(elapsed * 6) * 0.6)
+          addBoneRotation("leftUpperArm", 0, 0, 1.2 - Math.sin(elapsed * 6) * 0.6)
+          addBoneRotation("head", 0, Math.sin(elapsed * 3) * 0.2, 0)
+        } else if (phase < 6) {
+          addBoneRotation("rightUpperArm", 0, 0, 0.2 + Math.sin(elapsed * 6) * 0.8)
+          addBoneRotation("leftUpperArm", 0, 0, -0.2 - Math.sin(elapsed * 6) * 0.8)
+          addBoneRotation("leftUpperLeg", Math.sin(elapsed * 6) * 0.25, 0, 0)
+          addBoneRotation("rightUpperLeg", -Math.sin(elapsed * 6) * 0.25, 0, 0)
+        } else if (phase < 9) {
+          const beat = Math.abs(Math.sin(elapsed * 6.5))
+          addBoneRotation("rightUpperArm", -0.6, 0, 0.4 + beat * 0.2)
+          addBoneRotation("leftUpperArm", -0.6, 0, -0.4 - beat * 0.2)
+          addBoneRotation("head", 0, 0, Math.sin(elapsed * 3) * 0.06)
+        } else {
+          addBoneRotation("rightUpperArm", 0, 0, -2.0 + Math.sin(elapsed * 5) * 0.2)
+          addBoneRotation("leftUpperArm", 0, 0, 2.0 - Math.sin(elapsed * 5) * 0.2)
+          addBoneRotation("head", -0.1, 0, 0)
+        }
       }
     }
 

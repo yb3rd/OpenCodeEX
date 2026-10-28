@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require("electron")
+const { app, BrowserWindow, ipcMain, screen, shell } = require("electron")
 const { execFile } = require("child_process")
 const path = require("path")
 const fs = require("fs")
@@ -35,8 +35,7 @@ async function apiRequest(method, endpoint, body) {
   })
 }
 
-ipcMain.handle("pet:models", async () => {
-  try {
+ipcMain.handle("pet:models", async () => {  try {
     const res = await apiRequest("GET", "/api/model")
     if (!res.ok) return []
     const json = await res.json()
@@ -78,6 +77,34 @@ ipcMain.handle("pet:chat", async (_event, payload) => {
   }
 })
 
+ipcMain.handle("pet:list-models", async () => {
+  const dir = path.join(__dirname, "models")
+  const list = []
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+    for (const file of fs.readdirSync(dir)) {
+      if (/\.vrm$/i.test(file)) {
+        list.push({
+          name: file.replace(/\.vrm$/i, ""),
+          url: "file://" + path.join(dir, file).replace(/\\/g, "/"),
+        })
+      }
+    }
+  } catch {}
+  return list
+})
+
+ipcMain.handle("pet:open-models", async () => {
+  const dir = path.join(__dirname, "models")
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+    await shell.openPath(dir)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: String(error) }
+  }
+})
+
 ipcMain.handle("pet:speak", async (_event, payload) => {
   const text = String(payload?.text || "").slice(0, 500)
   const voice = String(payload?.voice || "zh-CN-XiaoxiaoNeural")
@@ -107,6 +134,18 @@ ipcMain.handle("pet:speak", async (_event, payload) => {
 
 ipcMain.on("pet:zones", (_event, next) => {
   zones = Array.isArray(next) ? next : []
+  if (!win || win.isDestroyed()) return
+  const rects = zones
+    .map((zone) => ({
+      x: Math.round(zone.x),
+      y: Math.round(zone.y),
+      width: Math.max(1, Math.round(zone.w)),
+      height: Math.max(1, Math.round(zone.h)),
+    }))
+    .filter((rect) => rect.width > 1 && rect.height > 1)
+  try {
+    win.setShape(rects.length ? rects : [{ x: 0, y: 0, width: 2, height: 2 }])
+  } catch {}
 })
 
 ipcMain.on("pet:drag-start", () => {
