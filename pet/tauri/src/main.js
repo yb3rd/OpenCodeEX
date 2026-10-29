@@ -260,17 +260,67 @@ function openComposer() {
   promptInput.focus()
 }
 
+let memory = { history: [], summary: "", updatedAt: 0, userTurns: 0 }
 let history = []
-try {
-  history = JSON.parse(localStorage.getItem("pet.history") || "[]")
-  if (!Array.isArray(history)) history = []
-} catch {
-  history = []
+
+function memoryNotes() {
+  const parts = []
+  if (memory.summary) parts.push(`长期记忆：\n${memory.summary}`)
+  return parts.join("\n\n")
+}
+
+async function loadMemory() {
+  try {
+    const data = await invoke("load_memory")
+    if (data && typeof data === "object") memory = { ...memory, ...data }
+  } catch {}
+  if (!Array.isArray(memory.history)) memory.history = []
+  if (!memory.history.length) {
+    try {
+      const local = JSON.parse(localStorage.getItem("pet.history") || "[]")
+      if (Array.isArray(local)) memory.history = local
+    } catch {}
+  }
+  history = memory.history.slice(-100)
+  if (history.length && !memory.updatedAt) saveHistory()
 }
 
 function saveHistory() {
+  memory.history = history.slice(-100)
+  memory.updatedAt = Date.now()
   localStorage.setItem("pet.history", JSON.stringify(history.slice(-20)))
+  void invoke("save_memory", { data: memory })
 }
+
+let memoryUpdating = false
+
+async function updateMemory() {
+  if (memoryUpdating || history.length < 4) return
+  memoryUpdating = true
+  try {
+    const transcript = history
+      .slice(-24)
+      .map((item) => `${item.role === "user" ? "用户" : "助手"}：${item.content}`)
+      .join("\n")
+    const prompt = `请把下面的旧记忆和对话合并成一段长期记忆。只保留用户姓名/称呼、偏好、习惯、重要事件、约定和需要记住的信息；用简洁中文，200字以内。\n\n旧记忆：\n${memory.summary || "无"}\n\n对话：\n${transcript}`
+    const result = await invoke("chat", {
+      text: prompt,
+      history: [],
+      model: currentModel(),
+      memory: "",
+      system: "你是记忆整理助手，只输出整理后的长期记忆，不要回答对话内容。",
+    })
+    if (result?.ok && result.text) {
+      memory.summary = result.text.trim().slice(0, 600)
+      history = history.slice(-40)
+      saveHistory()
+    }
+  } catch {} finally {
+    memoryUpdating = false
+  }
+}
+
+await loadMemory()
 
 function currentModel() {
   const value = localStorage.getItem("pet.model") || ""
@@ -328,15 +378,17 @@ async function sendPrompt() {
   promptInput.value = ""
   composer.classList.add("hidden")
   showBubble(`你：${text}`)
-  const result = await invoke("chat", { text, history, model: currentModel() })
+  const result = await invoke("chat", { text, history, model: currentModel(), memory: memoryNotes() })
   if (!result?.ok || !result.text) {
     showBubble(`回复失败：${result?.error || result?.status || "未知错误"}`)
     return
   }
   history.push({ role: "user", content: text })
   history.push({ role: "assistant", content: result.text })
-  history = history.slice(-20)
+  history = history.slice(-100)
+  memory.userTurns = (memory.userTurns || 0) + 1
   saveHistory()
+  if (memory.userTurns % 4 === 0) void updateMemory()
   lastText = cleanText(result.text)
   showBubble(lastText)
   speak(lastText)

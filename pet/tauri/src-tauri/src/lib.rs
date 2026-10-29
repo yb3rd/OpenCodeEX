@@ -102,6 +102,14 @@ fn music_dir(app: &AppHandle) -> PathBuf {
     asset_root(app).join("mp3")
 }
 
+fn memory_dir(app: &AppHandle) -> PathBuf {
+    asset_root(app).join("memory")
+}
+
+fn memory_file(app: &AppHandle) -> PathBuf {
+    memory_dir(app).join("memory.json")
+}
+
 fn list_files(dir: &Path, ext: &str) -> Vec<FileEntry> {
     let mut list = Vec::new();
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -150,6 +158,35 @@ fn list_music(app: AppHandle) -> Vec<FileEntry> {
     let dir = music_dir(&app);
     let _ = std::fs::create_dir_all(&dir);
     list_files(&dir, "mp3")
+}
+
+#[tauri::command]
+fn load_memory(app: AppHandle) -> serde_json::Value {
+    let file = memory_file(&app);
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .unwrap_or_else(|| json!({}))
+}
+
+#[tauri::command]
+fn save_memory(app: AppHandle, data: serde_json::Value) -> bool {
+    let file = memory_file(&app);
+    let Some(dir) = file.parent() else {
+        return false;
+    };
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let Ok(text) = serde_json::to_string_pretty(&data) else {
+        return false;
+    };
+    let tmp = file.with_extension("json.tmp");
+    if std::fs::write(&tmp, text).is_err() {
+        return false;
+    }
+    let _ = std::fs::remove_file(&file);
+    std::fs::rename(&tmp, &file).is_ok()
 }
 
 #[tauri::command]
@@ -216,6 +253,8 @@ async fn chat(
     text: String,
     history: Option<Vec<HistoryItem>>,
     model: Option<serde_json::Value>,
+    memory: Option<String>,
+    system: Option<String>,
 ) -> ChatResult {
     let text = text.trim().to_string();
     if text.is_empty() {
@@ -227,7 +266,7 @@ async fn chat(
         };
     }
     let history = history.unwrap_or_default();
-    let start = history.len().saturating_sub(12);
+    let start = history.len().saturating_sub(24);
     let lines = history[start..]
         .iter()
         .map(|item| {
@@ -237,12 +276,17 @@ async fn chat(
         .collect::<Vec<_>>()
         .join("\n");
 
+    let system_prompt = system.unwrap_or_else(|| {
+        "你是桌面宠物助手，用简洁、自然、口语化的中文回答。尽量一句话说完，不超过50个字，适合朗读。"
+            .to_string()
+    });
     let prompt = [
-        "你是桌面宠物助手，用简洁、自然、口语化的中文回答。尽量一句话说完，不超过50个字，适合朗读。".to_string(),
+        system_prompt,
+        memory.unwrap_or_default(),
         if lines.is_empty() {
             String::new()
         } else {
-            format!("之前的对话：\n{lines}")
+            format!("最近的对话：\n{lines}")
         },
         format!("用户：{text}"),
     ]
@@ -850,6 +894,7 @@ pub fn run() {
             let _ = std::fs::create_dir_all(models_dir(&handle));
             let _ = std::fs::create_dir_all(animations_dir(&handle));
             let _ = std::fs::create_dir_all(music_dir(&handle));
+            let _ = std::fs::create_dir_all(memory_dir(&handle));
 
             let click_item = CheckMenuItem::with_id(
                 app,
@@ -889,6 +934,8 @@ pub fn run() {
             list_model_files,
             list_animations,
             list_music,
+            load_memory,
+            save_memory,
             pick_animation,
             open_models,
             topic,

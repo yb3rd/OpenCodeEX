@@ -10,3 +10,4 @@ src-tauri/cargo-*.log
 conv/
 convert-bvh.mjs
 mp3/*.mp3
+memory/*.json

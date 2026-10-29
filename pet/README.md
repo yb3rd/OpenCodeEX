@@ -85,6 +85,26 @@ npm run start
 - 再按 **Ctrl+Alt+P**，或右键系统托盘里的 OpenCodePet 图标 →「点击穿透」取消
 - 状态会记住，下次启动保持
 
+## 长期记忆
+
+对话会写到本机 `memory/memory.json`，重启、关机、第二天打开都不会忘：
+
+- `history`：最近 100 条对话（发送给模型时取最近 24 条）
+- `summary`：每 4 轮对话自动整理一次长期记忆摘要（姓名/称呼、偏好、重要约定等）
+- 首次启动会把旧的 `localStorage` 对话迁移进来
+- 文件只在本地，不上传；想清空就关闭宠物后删除 `memory.json`
+
+```text
+OpenCodePet\
+├─ OpenCodePet.exe
+├─ memory\
+│  └─ memory.json   ← 对话记忆
+├─ mp3\
+├─ models\
+└─ animations\
+```
+
+
 ## 跳舞 + 音乐
 
 - 右键 → **💃 跳舞**：随机选一首 `mp3/` 里的音乐 + 随机选一个 `dance_*` 动作
@@ -101,7 +121,7 @@ OpenCodePet\
 └─ animations\
 ```
 
-对话记录保存在宠物自己的 `localStorage`（最近 20 条），不会出现在 OpenCode 的会话列表里。
+对话记录保存在宠物自己的 `memory/memory.json`，不会出现在 OpenCode 的会话列表里。
 
 透明区域点击穿透：Tauri 版用 Windows `SetWindowRgn` 按交互区域裁剪窗口，Electron 版用 `setShape`。
 不挡其他应用的点击、输入框和任务栏。
