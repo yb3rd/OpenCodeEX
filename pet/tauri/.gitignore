@@ -7,3 +7,5 @@ models/*.vrm
 animations/*.vrma
 src-tauri/.cargo/
 src-tauri/cargo-*.log
+conv/
+convert-bvh.mjs

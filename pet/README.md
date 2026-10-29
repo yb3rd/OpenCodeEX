@@ -81,7 +81,7 @@ npm run start
 
 ## 自主行为
 
-- **随机动作**：每 45–90 秒随机播放一段 VRMA（优先 `idle-maid` / `idle-sitting` / `FancyDressParty` / `Reading (Loop)`；`grabbed` 和 A–E 测试片段只在右键菜单手动选）
+- **随机动作**：每 45–90 秒随机播放一段 VRMA（自然动作和舞蹈都会参与，随机播放 8 秒；`grabbed` 和 A–E 测试片段只在右键菜单手动选）
 - **主动说话**：每 3–8 分钟随机挑一个话题，用 TTS 说出来
   - 打招呼
   - 问吃饭了没有
@@ -101,7 +101,28 @@ npm run start
   - 作者：not-elm / Desktop Homunculus
   - 授权：**CC-BY-4.0**（`@hmcs/assets` 为 MIT AND CC-BY-4.0）
   - 仓库不提交 `.vrma` / `.vrm` 原文件，仅在本机使用；公开发布二进制时请保留署名
-- 导入自己的动作：右键 →「导入动作文件」，选择 `.vrma`，会复制到 `animations/` 并立即播放
+- 构建自己的动作：右键 →「导入动作文件」，选择 `.vrma`，会复制到 `animations/` 并立即播放；右键 →「动作」可直接展开列表选择，舞蹈会一直循环，直到选「无（自然站立）」或换其他动作
+
+### 舞蹈动作（本机，不入库）
+
+已下载并转换成 VRMA 的 Mixamo 舞蹈：
+
+| 动作 | 时长 |
+| --- | --- |
+| `dance_ontop` | 24.3s |
+| `dance_backup` | 25.4s |
+| `dance_1` | 22.1s |
+| `dance_2` | 20.4s |
+| `dance_pushback` | 17.8s |
+| `dance_headdrop` | 15.7s |
+| `dance_gangnam_style` | 12.4s |
+| `dance_northern_soul_spin` | 8.9s |
+| `dance_dab` | 7.7s |
+| `dance_marachinostep` | 3.3s |
+| `dance_rumba` | 2.3s |
+
+来源：SillyTavern VRM 动作包的 BVH，经 BVH→VRMA 工具转换（原始动作来自 Mixamo），仅本机个人使用。文件不提交仓库。
+
 
 ## 对话模型
 

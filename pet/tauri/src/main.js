@@ -532,14 +532,18 @@ function renderAnimMenu() {
 
 async function loadAnimationList() {
   const list = (await invoke("list_animations")) || []
-  const priority = ["idle-maid", "idle-sitting", "FancyDressParty", "Reading (Loop)", "grabbed"]
+  const rank = (name) => {
+    if (name === "idle-maid") return 0
+    if (name === "idle-sitting") return 1
+    if (name === "FancyDressParty") return 2
+    if (name === "Reading (Loop)") return 3
+    if (/^dance/i.test(name)) return 4
+    if (name === "grabbed") return 5
+    return 9
+  }
   animationFiles = list
     .map((item) => ({ name: item.name, url: convertFileSrc(item.path) }))
-    .sort((a, b) => {
-      const ai = priority.indexOf(a.name)
-      const bi = priority.indexOf(b.name)
-      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.name.localeCompare(b.name)
-    })
+    .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
   animationUrls = list
     .filter((item) => !/^(grabbed|[a-e])$/i.test(item.name))
     .map((item) => convertFileSrc(item.path))
