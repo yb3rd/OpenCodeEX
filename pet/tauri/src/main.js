@@ -46,6 +46,7 @@ loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 
 let vrm = null
 let mixer = null
+let defaultIdleUrl = ""
 let armSign = 1
 let baseYaw = 0
 const restRotations = new Map()
@@ -95,6 +96,7 @@ async function loadModel(url) {
   }
 
   console.log(`VRM loaded: ${url}`)
+  if (defaultIdleUrl) void playAnimation(defaultIdleUrl)
 }
 
 async function playAnimation(url) {
@@ -548,7 +550,7 @@ function renderModelMenu() {
 }
 
 async function switchModel(url, name) {
-  if (dancing) stopDance(false)
+  if (dancing) stopDance(false, false)
   localStorage.setItem("pet.modelUrl", url)
   showBubble(`正在切换到 ${name}…`)
   try {
@@ -571,7 +573,7 @@ let lastRandomAction = ""
 function renderAnimMenu() {
   if (!menuAnimList) return
   menuAnimList.innerHTML = ""
-  const items = [{ name: "无（自然站立）", url: "" }, ...animationFiles]
+  const items = [...animationFiles]
   for (const item of items) {
     const button = document.createElement("button")
     button.type = "button"
@@ -579,9 +581,9 @@ function renderAnimMenu() {
     button.addEventListener("click", (event) => {
       event.stopPropagation()
       closeMenu()
-      if (dancing) stopDance(false)
+      if (dancing) stopDance(false, false)
       void playAnimation(item.url)
-      showBubble(item.url ? `动作：${item.name}` : "已恢复自然站立")
+      showBubble(`动作：${item.name}`)
     })
     menuAnimList.append(button)
   }
@@ -590,7 +592,11 @@ function renderAnimMenu() {
 let danceAudio = null
 let dancing = false
 
-function stopDance(showText = true) {
+function playDefaultIdle() {
+  if (defaultIdleUrl) void playAnimation(defaultIdleUrl)
+}
+
+function stopDance(showText = true, restoreIdle = true) {
   const was = dancing
   dancing = false
   if (danceAudio) {
@@ -604,11 +610,12 @@ function stopDance(showText = true) {
     mixer.stopAllAction()
     mixer = null
   }
+  if (restoreIdle) playDefaultIdle()
   if (showText && was) showBubble("已停止跳舞")
 }
 
 async function startDance() {
-  stopDance(false)
+  stopDance(false, false)
   const tracks = (await invoke("list_music")) || []
   if (!tracks.length) {
     showBubble("mp3 文件夹里没有音乐")
@@ -648,7 +655,7 @@ async function startDance() {
 }
 
 function randomAction() {
-  if (dancing) stopDance(false)
+  if (dancing) stopDance(false, false)
   const pool = animationFiles.filter((item) => item.url && !/^(grabbed|[a-e])$/i.test(item.name))
   if (!pool.length) return
   const choices = pool.length > 1 ? pool.filter((item) => item.name !== lastRandomAction) : pool
@@ -666,16 +673,23 @@ async function loadAnimationList() {
     if (name === "FancyDressParty") return 2
     if (name === "Reading (Loop)") return 3
     if (/^dance/i.test(name)) return 4
-    if (name === "grabbed") return 5
-    return 9
+    if (name === "grabbed") return 7
+    if (/^[a-e]$/i.test(name)) return 8
+    return 5
   }
   animationFiles = list
     .map((item) => ({ name: item.name, url: convertFileSrc(item.path) }))
     .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
+  const idle =
+    animationFiles.find((item) => item.name === "idle-maid") ||
+    animationFiles.find((item) => item.name === "neutral_idle") ||
+    animationFiles[0]
+  defaultIdleUrl = idle?.url || ""
   animationUrls = list
     .filter((item) => !/^(grabbed|[a-e])$/i.test(item.name))
     .map((item) => convertFileSrc(item.path))
   renderAnimMenu()
+  if (!mixer && !dancing) playDefaultIdle()
 }
 
 if (localStorage.getItem("pet.voiceName") === "zh-CN-XiaoxiaoNeural" && !localStorage.getItem("pet.voice.anime")) {

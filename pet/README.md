@@ -71,7 +71,7 @@ npm run start
 | **右键人物** | 菜单：输入消息 / 点击穿透 / 朗读上一条 / 朗读下一条 / 静音 / 换模型 / 动作 / 跳舞 / 设置（最下）/ 退出；菜单右上角 ✕ 可关闭 |
 
 「换模型」直接在右键菜单里展开 VRM 列表，选中即切换。
-「动作」在右键菜单里展开 VRMA 列表，选中即播放；选「无（自然站立）」恢复默认站立。
+「动作」在右键菜单里展开 VRMA 列表，选中即播放；列表不再提供「无/自然站立」，待机固定用 `idle-maid` 循环。
 「朗读下一条」会立刻触发一次主动说话（随机话题）并朗读。
 聊天输入框在右键 →「输入消息」。
 「设置」固定在菜单最下面，里面有模型文件夹、导入动作、声音等。
@@ -109,7 +109,8 @@ OpenCodePet\
 
 - 右键 → **💃 跳舞**：随机选一首 `mp3/` 里的音乐 + 随机选一个 `dance_*` 动作
 - 音乐播放期间一直循环跳舞，音乐结束自动停止
-- 跳舞过程中**双击人物**：立即停止音乐和跳舞
+- 停止后自动回到 `idle-maid` 待机动作，不会回到「无/自然站立」
+- 跳舞过程中**双击人物**：立即停止音乐，并回到 `idle-maid` 待机
 - 音乐文件夹在 exe 同级的 `mp3/`，放自己的 `.mp3` 即可；示例 `dance_demo.mp3` 是本地生成的 90 秒节拍
 - 音频仅本机使用，不提交仓库
 
@@ -120,6 +121,16 @@ OpenCodePet\
 ├─ models\
 └─ animations\
 ```
+
+### 女性化 / 情绪动作
+
+已额外加入 21 个（与 11 个舞蹈合计 42 个动作）：
+
+- 情绪/可爱：`action_attention_seeking`、`action_pat`、`action_greeting`、`admiration`、`caring`、`curiosity`、`embarrassment`、`excitement`、`gratitude`、`joy`、`love`、`love2`、`pride`
+- 待机/姿势：`neutral_idle`、`sit_idle`、`kneel_idle`、`laying_idle`
+- 现成 VRMA：`hello`、`greeting`、`greeting2`、`peace sign`
+
+来源：SillyTavern VRM 动作包的 BVH/VRMA（原始动作来自 Mixamo），仅本机个人使用，不提交仓库。右键「动作」即可选。
 
 对话记录保存在宠物自己的 `memory/memory.json`，不会出现在 OpenCode 的会话列表里。
 
