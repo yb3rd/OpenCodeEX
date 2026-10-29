@@ -10,6 +10,7 @@ const appWindow = getCurrentWindow()
 
 const canvas = document.getElementById("view")
 const bubble = document.getElementById("bubble")
+const choices = document.getElementById("choices")
 const composer = document.getElementById("composer")
 const promptInput = document.getElementById("prompt")
 const sendButton = document.getElementById("send")
@@ -19,6 +20,7 @@ const ddModel = document.getElementById("dd-model")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
+const ddTalk = document.getElementById("dd-talk")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
 const menuModelList = document.getElementById("model-list")
@@ -198,9 +200,71 @@ try {
   }
 }
 
-let nextTalk = performance.now() + 90000
+const talkModeOptions = [
+  { value: "off", label: "关闭" },
+  { value: "normal", label: "普通（3–7 分钟）" },
+  { value: "frequent", label: "经常（1–2 分钟）" },
+  { value: "very", label: "很频繁（30–60 秒）" },
+]
+
+const talkModeIntervals = {
+  normal: [180000, 420000],
+  frequent: [60000, 120000],
+  very: [30000, 60000],
+}
+
+const savedTalkMode = localStorage.getItem("pet.talkMode")
+let talkMode = talkModeOptions.some((item) => item.value === savedTalkMode) ? savedTalkMode : "frequent"
+let talkDropdown = null
+let talkBusy = false
+let nextTalk = 0
 let nextAnim = performance.now() + 25000
 let animationUrls = []
+
+function talkModeLabel(value) {
+  return talkModeOptions.find((item) => item.value === value)?.label || "经常"
+}
+
+function scheduleNextTalk(delay) {
+  if (talkMode === "off") {
+    nextTalk = Infinity
+    return
+  }
+  const [min, max] = talkModeIntervals[talkMode] || talkModeIntervals.frequent
+  nextTalk = performance.now() + (Number.isFinite(delay) ? delay : min + Math.random() * (max - min))
+}
+
+function setTalkMode(value, announce = false) {
+  talkMode = talkModeOptions.some((item) => item.value === value) ? value : "frequent"
+  localStorage.setItem("pet.talkMode", talkMode)
+  talkDropdown?.setValue(talkMode)
+  refreshMenu()
+  scheduleNextTalk()
+  if (announce) {
+    showBubble(talkMode === "off" ? "主动聊天已关闭" : `主动聊天：${talkModeLabel(talkMode)}`)
+  }
+}
+
+function cycleTalkMode() {
+  const values = talkModeOptions.map((item) => item.value)
+  const index = values.indexOf(talkMode)
+  setTalkMode(values[(index + 1) % values.length], true)
+}
+
+function autoTalkBlocked() {
+  return (
+    talkBusy ||
+    speaking ||
+    dancing ||
+    singing ||
+    !composer.classList.contains("hidden") ||
+    !settings.classList.contains("hidden") ||
+    !newsDetail.classList.contains("hidden") ||
+    !choices.classList.contains("hidden")
+  )
+}
+
+scheduleNextTalk(25000 + Math.random() * 20000)
 
 let speaking = false
 let lastText = ""
@@ -237,6 +301,7 @@ function showBubble(text) {
   bubble.classList.remove("hidden")
   hiddenAt = performance.now() + 20000
   newsMore.classList.add("hidden")
+  hideChoices()
 }
 
 let newsData = { title: "", items: [] }
@@ -282,17 +347,478 @@ newsMore.addEventListener("click", (event) => {
   openNewsDetail()
 })
 
+const choiceQuestions = [
+  {
+    text: "今天心情怎么样呀？",
+    options: [
+      { label: "开心", send: "我今天心情很好" },
+      { label: "一般", send: "我今天心情一般" },
+      { label: "有点累", send: "我今天有点累" },
+    ],
+  },
+  {
+    text: "你现在在忙什么？",
+    options: [
+      { label: "工作", send: "我正在忙工作" },
+      { label: "学习", send: "我正在学习" },
+      { label: "摸鱼", send: "我正在摸鱼" },
+    ],
+  },
+  {
+    text: "中午想吃点什么？",
+    options: [
+      { label: "外卖", send: "中午想点外卖" },
+      { label: "自己做", send: "中午想自己做饭" },
+      { label: "随便", send: "中午吃什么都行" },
+    ],
+  },
+  {
+    text: "晚饭有想好吗？",
+    options: [
+      { label: "还没想", send: "晚饭还没想好吃什么" },
+      { label: "点外卖", send: "晚饭想点外卖" },
+      { label: "自己做", send: "晚饭想自己做" },
+    ],
+  },
+  {
+    text: "周末想怎么过？",
+    options: [
+      { label: "宅家", send: "周末想宅在家里" },
+      { label: "出去玩", send: "周末想出去玩" },
+      { label: "打游戏", send: "周末想打游戏" },
+    ],
+  },
+  {
+    text: "最近在玩什么游戏？",
+    options: [
+      { label: "手游", send: "最近在玩手游" },
+      { label: "单机", send: "最近在玩单机游戏" },
+      { label: "没玩", send: "最近没怎么玩游戏" },
+    ],
+  },
+  {
+    text: "喜欢猫还是狗？",
+    options: [
+      { label: "猫", send: "我更喜欢猫" },
+      { label: "狗", send: "我更喜欢狗" },
+      { label: "都喜欢", send: "猫和狗我都喜欢" },
+    ],
+  },
+  {
+    text: "你更喜欢甜的还是辣的？",
+    options: [
+      { label: "甜的", send: "我更喜欢甜的" },
+      { label: "辣的", send: "我更喜欢辣的" },
+      { label: "都爱", send: "甜的和辣的我都喜欢" },
+    ],
+  },
+  {
+    text: "今天喝够水了吗？",
+    options: [
+      { label: "喝了", send: "我今天喝够水了" },
+      { label: "还没", send: "我今天还没喝够水" },
+      { label: "马上去", send: "我马上去喝水" },
+    ],
+  },
+  {
+    text: "昨晚睡得好吗？",
+    options: [
+      { label: "很好", send: "我昨晚睡得很好" },
+      { label: "一般", send: "我昨晚睡得一般" },
+      { label: "没睡好", send: "我昨晚没睡好" },
+    ],
+  },
+  {
+    text: "现在累不累？",
+    options: [
+      { label: "不累", send: "我现在不累" },
+      { label: "有点", send: "我现在有点累" },
+      { label: "很累", send: "我现在很累" },
+    ],
+  },
+  {
+    text: "要不要我给你讲条新闻？",
+    options: [
+      { label: "📰 来一条", action: "news" },
+      { label: "🎵 放首歌", action: "sing" },
+      { label: "下次吧", send: "下次再听新闻吧" },
+    ],
+  },
+  {
+    text: "想听我唱首歌吗？",
+    options: [
+      { label: "🎤 唱吧", action: "sing" },
+      { label: "💃 跳个舞", action: "dance" },
+      { label: "安静会儿", action: "quiet" },
+    ],
+  },
+  {
+    text: "你喜欢我安静一点还是话多一点？",
+    options: [
+      { label: "话多点", send: "我喜欢你话多一点" },
+      { label: "安静点", send: "我希望你安静一点" },
+      { label: "现在这样", send: "你现在这样就很好" },
+    ],
+  },
+  {
+    text: "我这样经常找你，会不会烦到你？",
+    options: [
+      { label: "不会呀", send: "不会呀，我不觉得烦" },
+      { label: "有点", send: "有一点点烦" },
+      { label: "喜欢", send: "我挺喜欢你找我的" },
+    ],
+  },
+  {
+    text: "你希望我怎么称呼你？",
+    options: [
+      { label: "叫我老板", send: "以后叫我老板吧" },
+      { label: "叫我哥哥", send: "以后叫我哥哥吧" },
+      { label: "就叫名字", send: "还是叫我的名字吧" },
+    ],
+  },
+  {
+    text: "有什么想让我记住的吗？",
+    options: [
+      { label: "有", action: "compose" },
+      { label: "没有", send: "暂时没有想让你记住的" },
+      { label: "你猜", send: "你猜猜看" },
+    ],
+  },
+  {
+    text: "最近有在追番吗？",
+    options: [
+      { label: "在追", send: "我最近在追番" },
+      { label: "没追", send: "我最近没追番" },
+      { label: "推荐一部", send: "给我推荐一部番吧" },
+    ],
+  },
+  {
+    text: "喜欢什么颜色？",
+    options: [
+      { label: "蓝色", send: "我喜欢蓝色" },
+      { label: "粉色", send: "我喜欢粉色" },
+      { label: "黑色", send: "我喜欢黑色" },
+    ],
+  },
+  {
+    text: "今天有没有摸鱼？",
+    options: [
+      { label: "摸了", send: "今天摸鱼了" },
+      { label: "没有", send: "今天没有摸鱼" },
+      { label: "一直在摸", send: "今天一直在摸鱼" },
+    ],
+  },
+  {
+    text: "你一般几点睡？",
+    options: [
+      { label: "早点睡", send: "我一般睡得比较早" },
+      { label: "十二点", send: "我一般十二点睡" },
+      { label: "熬夜", send: "我经常熬夜" },
+    ],
+  },
+  {
+    text: "早饭吃了吗？",
+    options: [
+      { label: "吃了", send: "我吃过早饭了" },
+      { label: "没吃", send: "我还没吃早饭" },
+      { label: "还没起", send: "我还没起床" },
+    ],
+  },
+  {
+    text: "现在最想做什么？",
+    options: [
+      { label: "睡觉", send: "我现在最想睡觉" },
+      { label: "玩游戏", send: "我现在最想玩游戏" },
+      { label: "出门", send: "我现在最想出门走走" },
+    ],
+  },
+  {
+    text: "喜欢听什么类型的歌？",
+    options: [
+      { label: "流行", send: "我喜欢听流行歌" },
+      { label: "二次元", send: "我喜欢听二次元歌曲" },
+      { label: "纯音乐", send: "我喜欢听纯音乐" },
+    ],
+  },
+  {
+    text: "想看我跳舞吗？",
+    options: [
+      { label: "💃 跳吧", action: "dance" },
+      { label: "🎤 唱歌", action: "sing" },
+      { label: "下次", send: "下次再看你跳舞吧" },
+    ],
+  },
+  {
+    text: "你猜我现在在想什么？",
+    options: [
+      { label: "吃的", send: "你在想吃的吧" },
+      { label: "玩的", send: "你在想玩的吧" },
+      { label: "我", send: "你是在想我吧" },
+    ],
+  },
+  {
+    text: "你觉得自己是内向还是外向？",
+    options: [
+      { label: "内向", send: "我觉得自己比较内向" },
+      { label: "外向", send: "我觉得自己比较外向" },
+      { label: "看情况", send: "我内向还是外向要看情况" },
+    ],
+  },
+  {
+    text: "喜欢下雨天还是晴天？",
+    options: [
+      { label: "雨天", send: "我更喜欢下雨天" },
+      { label: "晴天", send: "我更喜欢晴天" },
+      { label: "都行", send: "下雨天和晴天我都喜欢" },
+    ],
+  },
+  {
+    text: "最近有什么开心的事吗？",
+    options: [
+      { label: "有", send: "最近有开心的事" },
+      { label: "没有", send: "最近没什么开心的事" },
+      { label: "想听你说", send: "我想听你说点开心的" },
+    ],
+  },
+  {
+    text: "最近有什么烦心事吗？",
+    options: [
+      { label: "有", send: "最近有烦心事" },
+      { label: "还好", send: "最近还好，没什么烦心事" },
+      { label: "不想说", send: "我现在不想说烦心事" },
+    ],
+  },
+  {
+    text: "更想去海边还是山上？",
+    options: [
+      { label: "海边", send: "我更想去海边" },
+      { label: "山上", send: "我更想去山上" },
+      { label: "都想去", send: "海边和山上我都想去" },
+    ],
+  },
+  {
+    text: "喜欢喝奶茶还是咖啡？",
+    options: [
+      { label: "奶茶", send: "我更喜欢喝奶茶" },
+      { label: "咖啡", send: "我更喜欢喝咖啡" },
+      { label: "都不喝", send: "奶茶和咖啡我都不怎么喝" },
+    ],
+  },
+  {
+    text: "今天有没有遇到好玩的事？",
+    options: [
+      { label: "有", send: "今天遇到了好玩的事" },
+      { label: "没有", send: "今天没遇到什么好玩的事" },
+      { label: "你猜", send: "你猜我今天遇到好玩的事没有" },
+    ],
+  },
+  {
+    text: "你平时喜欢一个人待着吗？",
+    options: [
+      { label: "喜欢", send: "我平时喜欢一个人待着" },
+      { label: "不喜欢", send: "我平时不太喜欢一个人待着" },
+      { label: "看心情", send: "我一个人待着要看心情" },
+    ],
+  },
+  {
+    text: "要不要一起休息十分钟？",
+    options: [
+      { label: "好呀", send: "好呀，一起休息十分钟" },
+      { label: "再聊会儿", send: "再陪我聊一会儿吧" },
+      { label: "不用", send: "不用休息，我还不累" },
+    ],
+  },
+  {
+    text: "你对我第一印象怎么样？",
+    options: [
+      { label: "可爱", send: "你给我的第一印象很可爱" },
+      { label: "话多", send: "你给我的第一印象是话有点多" },
+      { label: "挺好", send: "你给我的第一印象挺好的" },
+    ],
+  },
+  {
+    text: "你觉得我可爱吗？",
+    options: [
+      { label: "可爱", send: "我觉得你很可爱" },
+      { label: "一般", send: "我觉得你一般可爱" },
+      { label: "非常可爱", send: "我觉得你非常可爱" },
+    ],
+  },
+  {
+    text: "如果放假一天，你想干嘛？",
+    options: [
+      { label: "睡觉", send: "放假一天我想睡觉" },
+      { label: "出去玩", send: "放假一天我想出去玩" },
+      { label: "打游戏", send: "放假一天我想打游戏" },
+    ],
+  },
+  {
+    text: "喜欢什么季节？",
+    options: [
+      { label: "春天", send: "我喜欢春天" },
+      { label: "夏天", send: "我喜欢夏天" },
+      { label: "秋冬", send: "我喜欢秋冬" },
+    ],
+  },
+  {
+    text: "你最近在看什么剧？",
+    options: [
+      { label: "在追剧", send: "我最近在追剧" },
+      { label: "没看", send: "我最近没看剧" },
+      { label: "推荐一部", send: "给我推荐一部剧吧" },
+    ],
+  },
+  {
+    text: "今天穿什么颜色的衣服？",
+    options: [
+      { label: "深色", send: "我今天穿的是深色衣服" },
+      { label: "浅色", send: "我今天穿的是浅色衣服" },
+      { label: "你猜", send: "你猜我今天穿什么颜色" },
+    ],
+  },
+  {
+    text: "你更喜欢早上还是晚上？",
+    options: [
+      { label: "早上", send: "我更喜欢早上" },
+      { label: "晚上", send: "我更喜欢晚上" },
+      { label: "都行", send: "早上和晚上我都喜欢" },
+    ],
+  },
+  {
+    text: "要不要我安静陪你一会儿？",
+    options: [
+      { label: "好呀", action: "quiet" },
+      { label: "再聊会儿", send: "再陪我聊一会儿吧" },
+      { label: "不用", send: "不用啦，我现在挺好" },
+    ],
+  },
+]
+
+const eatenChoices = [
+  { label: "吃了", send: "我吃过了" },
+  { label: "还没吃", send: "我还没吃饭" },
+  { label: "你猜", send: "你猜我吃没吃" },
+]
+
+let questionDeck = []
+let lastQuestionText = ""
+let pendingChoice = null
+let lastChoiceClick = 0
+
+function nextChoiceQuestion() {
+  if (!questionDeck.length) {
+    questionDeck = choiceQuestions.map((_, index) => index)
+    for (let i = questionDeck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[questionDeck[i], questionDeck[j]] = [questionDeck[j], questionDeck[i]]
+    }
+    if (questionDeck.length > 1 && choiceQuestions[questionDeck[0]].text === lastQuestionText) {
+      ;[questionDeck[0], questionDeck[questionDeck.length - 1]] = [
+        questionDeck[questionDeck.length - 1],
+        questionDeck[0],
+      ]
+    }
+  }
+  const index = questionDeck.pop()
+  const question = choiceQuestions[index]
+  lastQuestionText = question.text
+  return question
+}
+
+function hideChoices() {
+  pendingChoice = null
+  choices.classList.add("hidden")
+  choices.innerHTML = ""
+}
+
+function showChoices(question, options) {
+  if (!options?.length) return
+  pendingChoice = { question, options }
+  choices.innerHTML = ""
+  options.forEach((option, index) => {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "choice-btn"
+    button.textContent = option.label
+    button.dataset.index = String(index)
+    choices.append(button)
+  })
+  choices.classList.remove("hidden")
+  hiddenAt = performance.now() + 60000
+}
+
+function stopSpeech() {
+  speechToken += 1
+  if (audio) {
+    audio.pause()
+    audio = null
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel()
+  speaking = false
+}
+
+async function askChoiceQuestion() {
+  const question = nextChoiceQuestion()
+  showBubble(question.text)
+  showChoices(question.text, question.options)
+  speak(question.text)
+}
+
+async function runChoiceAction(action) {
+  if (action === "news") {
+    const kinds = ["ai-news", "world-news", "anime-news", "game-news", "acg-news"]
+    showBubble("好，我去看看今天有什么新闻…")
+    await autonomousTalk(false, kinds[Math.floor(Math.random() * kinds.length)])
+  } else if (action === "sing") {
+    await startSing()
+  } else if (action === "dance") {
+    await startDance()
+  } else if (action === "compose") {
+    openComposer()
+  } else if (action === "quiet") {
+    scheduleNextTalk(10 * 60 * 1000)
+    showBubble("好，那我安静陪着你～")
+  } else if (action === "weather") {
+    await autonomousTalk(false, "weather")
+  }
+}
+
+async function chooseOption(index) {
+  if (!pendingChoice) return
+  const { question, options } = pendingChoice
+  const option = options[index]
+  if (!option) return
+  hideChoices()
+  stopSpeech()
+  if (option.action) {
+    await runChoiceAction(option.action)
+    return
+  }
+  await sendPrompt(option.send || option.label, question, option.label)
+}
+
+choices.addEventListener("click", (event) => {
+  const button = event.target.closest(".choice-btn")
+  if (!button) return
+  event.stopPropagation()
+  lastChoiceClick = performance.now()
+  void chooseOption(Number(button.dataset.index))
+})
+
 let voiceOn = localStorage.getItem("pet.voice.v3") !== "0"
 
 let audio = null
+let speechToken = 0
 
 async function speak(text, force = false) {
   if (!voiceOn && !force) return
+  const token = ++speechToken
   const voice = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoyiNeural"
   if (voice !== "system") {
     const rate = localStorage.getItem("pet.rate") || "+0%"
     const pitch = localStorage.getItem("pet.pitch") || "+0Hz"
-    const result = await invoke("speak", { text, voice, rate, pitch })
+    const result = await invoke("speak", { text, voice, rate, pitch }).catch(() => null)
+    if (token !== speechToken) return
     if (!result?.ok) console.log(`[speak] failed: ${result?.error ?? "unknown"}`)
     if (result?.ok && result.audio) {
       try {
@@ -345,11 +871,7 @@ function speakSystem(text) {
 function toggleVoice() {
   voiceOn = !voiceOn
   localStorage.setItem("pet.voice.v3", voiceOn ? "1" : "0")
-  if (!voiceOn) {
-    speechSynthesis.cancel()
-    audio?.pause()
-    speaking = false
-  }
+  if (!voiceOn) stopSpeech()
   refreshMenu()
 }
 
@@ -362,12 +884,7 @@ function testVoice() {
 
 async function speakNext() {
   if (dancing) stopDance(false, false)
-  if (audio) {
-    audio.pause()
-    audio = null
-  }
-  if ("speechSynthesis" in window) speechSynthesis.cancel()
-  speaking = false
+  stopSpeech()
   showBubble("让我想想下一条…")
   await autonomousTalk(true)
 }
@@ -377,6 +894,9 @@ function openComposer() {
   menu.classList.add("hidden")
   bubble.classList.add("hidden")
   closeNewsDetail()
+  hideChoices()
+  stopSpeech()
+  scheduleNextTalk()
   composer.classList.remove("hidden")
   promptInput.focus()
 }
@@ -449,10 +969,41 @@ function currentModel() {
   return providerID && id ? { providerID, id } : undefined
 }
 
-async function autonomousTalk(manual = false) {
-  if (!manual && (speaking || dancing || !composer.classList.contains("hidden") || !settings.classList.contains("hidden"))) return
-  const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news", "anime-news", "game-news", "acg-news"]
-  const kind = kinds[Math.floor(Math.random() * kinds.length)]
+const talkKindWeights = [
+  ["greeting", 3],
+  ["eaten", 2],
+  ["weather", 2],
+  ["ai-news", 1],
+  ["world-news", 1],
+  ["anime-news", 1],
+  ["game-news", 1],
+  ["acg-news", 1],
+]
+
+let lastTalkKind = ""
+
+function pickTalkKind() {
+  const pool = []
+  for (const [kind, weight] of talkKindWeights) {
+    for (let index = 0; index < weight; index++) pool.push(kind)
+  }
+  let kind = pool[Math.floor(Math.random() * pool.length)]
+  if (kind === lastTalkKind && pool.length > 1) {
+    kind = pool[Math.floor(Math.random() * pool.length)]
+  }
+  lastTalkKind = kind
+  return kind
+}
+
+async function autonomousTalk(manual = false, forcedKind = "") {
+  if (!manual && autoTalkBlocked()) return
+  if (!forcedKind && Math.random() < 0.55) {
+    if (manual) scheduleNextTalk()
+    await askChoiceQuestion()
+    return
+  }
+  const kind = forcedKind || pickTalkKind()
+  talkBusy = true
   let prompt
   let pendingNews = null
   if (kind === "greeting") {
@@ -460,7 +1011,7 @@ async function autonomousTalk(manual = false) {
   } else if (kind === "eaten") {
     prompt = "用一句自然的中文问用户吃饭了没有，关心但不要啰嗦，不要超过20个字。"
   } else {
-    const topic = await invoke("topic", { kind })
+    const topic = await invoke("topic", { kind }).catch(() => null)
     if (!topic?.ok) {
       const fallbacks = {
         weather: "用一句中文问候用户，并提醒注意天气。",
@@ -485,31 +1036,56 @@ async function autonomousTalk(manual = false) {
       }
     }
   }
-  const result = await invoke("chat", { text: prompt, history: [], model: currentModel() })
+  const result = await invoke("chat", {
+    text: prompt,
+    history: [],
+    model: currentModel(),
+    memory: memoryNotes(),
+  }).catch(() => null)
   if (result?.ok && result.text) {
     lastText = cleanText(result.text)
     showBubble(lastText)
     if (pendingNews) showNewsButton(pendingNews.items, pendingNews.title)
+    if (kind === "eaten") showChoices(lastText, eatenChoices)
     speak(lastText)
   } else if (manual) {
     lastText = "我现在还没想好说什么，稍后再聊吧。"
     showBubble(lastText)
     speak(lastText, true)
   }
+  if (manual || forcedKind) scheduleNextTalk()
+  talkBusy = false
 }
 
-async function sendPrompt() {
+async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   if (dancing) stopDance(false, false)
-  const text = promptInput.value.trim()
+  stopSpeech()
+  const text = (rawText ?? promptInput.value).trim()
   if (!text) return
-  promptInput.value = ""
+  if (rawText == null) promptInput.value = ""
   composer.classList.add("hidden")
-  showBubble(`你：${text}`)
-  const result = await invoke("chat", { text, history, model: currentModel(), memory: memoryNotes() })
+  showBubble(`你：${displayText || text}`)
+  const outgoingHistory = contextQuestion
+    ? [...history, { role: "assistant", content: contextQuestion }]
+    : history
+  talkBusy = true
+  let result
+  try {
+    result = await invoke("chat", {
+      text,
+      history: outgoingHistory,
+      model: currentModel(),
+      memory: memoryNotes(),
+    }).catch(() => null)
+  } finally {
+    talkBusy = false
+  }
   if (!result?.ok || !result.text) {
     showBubble(`回复失败：${result?.error || result?.status || "未知错误"}`)
+    scheduleNextTalk()
     return
   }
+  if (contextQuestion) history.push({ role: "assistant", content: contextQuestion })
   history.push({ role: "user", content: text })
   history.push({ role: "assistant", content: result.text })
   history = history.slice(-100)
@@ -519,6 +1095,7 @@ async function sendPrompt() {
   lastText = cleanText(result.text)
   showBubble(lastText)
   speak(lastText)
+  scheduleNextTalk()
 }
 
 let models = []
@@ -747,6 +1324,7 @@ function stopDance(showText = true, restoreIdle = true) {
   }
   if (restoreIdle) playDefaultIdle()
   if (showText && was) showBubble(wasSinging ? "已停止唱歌" : "已停止跳舞")
+  if (was) scheduleNextTalk()
 }
 
 async function startDance() {
@@ -900,6 +1478,8 @@ const pitchDropdown = createDropdown(
   (value) => localStorage.setItem("pet.pitch", value),
 )
 
+talkDropdown = createDropdown(ddTalk, talkModeOptions, talkMode, (value) => setTalkMode(value))
+
 function fillModels() {
   const mode = modeDropdown.value
   const list = models.filter((item) =>
@@ -922,8 +1502,10 @@ async function openSettings() {
   menu.classList.add("hidden")
   bubble.classList.add("hidden")
   closeNewsDetail()
+  hideChoices()
   settings.classList.toggle("hidden")
   if (settings.classList.contains("hidden")) return
+  scheduleNextTalk()
   settings.scrollTop = 0
   if (!models.length) models = (await invoke("list_models")) || []
   fillModels()
@@ -938,6 +1520,8 @@ function refreshMenu() {
     clickItem.textContent =
       localStorage.getItem("pet.clickThrough") === "1" ? "🖱 点击穿透：开" : "🖱 点击穿透：关"
   }
+  const talkItem = menu.querySelector('[data-action="talk"]')
+  if (talkItem) talkItem.textContent = `💬 主动聊天：${talkMode === "off" ? "关闭" : talkModeLabel(talkMode).replace(/（.*）/, "")}`
 }
 
 function closeMenu() {
@@ -962,6 +1546,7 @@ window.addEventListener("contextmenu", (event) => {
 })
 
 window.addEventListener("dblclick", (event) => {
+  if (performance.now() - lastChoiceClick < 600) return
   if (event.target.closest("input, select, textarea, button, .settings, .context-menu, .news-detail, .news-more")) return
   if (dancing) stopDance()
   else randomAction()
@@ -1002,6 +1587,7 @@ menu.addEventListener("click", (event) => {
     refreshMenu()
     showBubble(next ? "已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭" : "已关闭点击穿透")
   }
+  else if (action === "talk") cycleTalkMode()
   else if (action === "dance") void startDance()
   else if (action === "sing") void startSing()
   else if (action === "quit") appWindow.close()
@@ -1070,6 +1656,13 @@ function publishZones() {
     zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
   }
 
+  if (!choices.classList.contains("hidden")) {
+    const rect = choices.getBoundingClientRect()
+    if (rect.width > 1 && rect.height > 1) {
+      zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+    }
+  }
+
   if (!newsMore.classList.contains("hidden")) {
     const rect = newsMore.getBoundingClientRect()
     zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
@@ -1133,8 +1726,8 @@ function animate() {
   const delta = clock.getDelta()
   const time = clock.elapsedTime
 
-  if (!speaking && performance.now() > nextTalk) {
-    nextTalk = performance.now() + 180000 + Math.random() * 240000
+  if (performance.now() > nextTalk && !autoTalkBlocked()) {
+    scheduleNextTalk()
     void autonomousTalk()
   }
   if (!mixer && !speaking && animationUrls.length && performance.now() > nextAnim) {
@@ -1154,6 +1747,7 @@ function animate() {
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
     newsMore.classList.add("hidden")
+    hideChoices()
     hiddenAt = 0
   }
 

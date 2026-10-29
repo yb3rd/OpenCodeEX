@@ -157,6 +157,41 @@ body {
   display: none;
 }
 
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 284px;
+  pointer-events: none;
+}
+
+.choices.hidden {
+  display: none;
+}
+
+.choice-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(22, 24, 29, 0.95);
+  color: #f0f4ff;
+  font: 11px/1.35 "Microsoft YaHei", system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.choice-btn:hover {
+  border-color: rgba(130, 170, 255, 0.7);
+  background: rgba(70, 110, 200, 0.8);
+  color: #fff;
+}
+
+.choice-btn:active {
+  transform: translateY(1px);
+}
+
 #view {
   width: 260px;
   height: 340px;
@@ -217,7 +252,7 @@ body {
   font: 12px "Microsoft YaHei", system-ui, sans-serif;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .settings-title {

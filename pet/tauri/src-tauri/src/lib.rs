@@ -168,6 +168,13 @@ fn list_music(app: AppHandle) -> Vec<FileEntry> {
     let dir = music_dir(&app);
     let _ = std::fs::create_dir_all(&dir);
     list_files(&dir, "mp3")
+        .into_iter()
+        .filter(|entry| {
+            std::fs::metadata(&entry.path)
+                .map(|meta| meta.is_file() && meta.len() > 0)
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 #[tauri::command]
