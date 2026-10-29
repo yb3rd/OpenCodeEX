@@ -751,6 +751,18 @@ pub fn run() {
                 ensure_frameless(&window);
                 let _ = window.show();
                 let _ = window.set_focus();
+                #[cfg(windows)]
+                {
+                    let _ = apply_window_region(
+                        &window,
+                        &[Zone {
+                            x: 40.0,
+                            y: 28.0,
+                            w: 220.0,
+                            h: 312.0,
+                        }],
+                    );
+                }
             }
         }))
         .plugin(
@@ -774,6 +786,18 @@ pub fn run() {
                 let _ = window.set_resizable(false);
                 #[cfg(windows)]
                 remove_window_frame(&window);
+                #[cfg(windows)]
+                {
+                    let _ = apply_window_region(
+                        &window,
+                        &[Zone {
+                            x: 40.0,
+                            y: 28.0,
+                            w: 220.0,
+                            h: 312.0,
+                        }],
+                    );
+                }
                 place_bottom_right(&window);
 
                 let win_events = window.clone();
@@ -794,6 +818,15 @@ pub fn run() {
                             remove_window_frame(&win2);
                             let _ = win2.show();
                             let _ = win2.set_focus();
+                            let _ = apply_window_region(
+                                &win2,
+                                &[Zone {
+                                    x: 40.0,
+                                    y: 28.0,
+                                    w: 220.0,
+                                    h: 312.0,
+                                }],
+                            );
                         });
                     });
                 }
