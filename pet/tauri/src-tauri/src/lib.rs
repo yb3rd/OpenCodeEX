@@ -620,6 +620,35 @@ fn set_zones(window: WebviewWindow, state: State<'_, PetState>, zones: Vec<Zone>
 }
 
 #[cfg(windows)]
+fn remove_window_frame(window: &WebviewWindow) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongW, SetWindowLongW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_NOZORDER, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
+        WS_THICKFRAME,
+    };
+
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    unsafe {
+        let style = GetWindowLongW(hwnd.0 as _, GWL_STYLE);
+        let frame_mask =
+            (WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU) as i32;
+        let new_style = style & !frame_mask;
+        SetWindowLongW(hwnd.0 as _, GWL_STYLE, new_style);
+        SetWindowPos(
+            hwnd.0 as _,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+        );
+    }
+}
+
+#[cfg(windows)]
 fn apply_window_region(window: &WebviewWindow, zones: &[Zone]) -> tauri::Result<()> {
     use windows_sys::Win32::Graphics::Gdi::{
         CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_OR,
@@ -700,6 +729,10 @@ pub fn run() {
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_always_on_top(true);
+                let _ = window.set_decorations(false);
+                let _ = window.set_resizable(false);
+                #[cfg(windows)]
+                remove_window_frame(&window);
                 place_bottom_right(&window);
             }
             let handle = app.handle().clone();
