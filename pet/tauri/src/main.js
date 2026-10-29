@@ -112,6 +112,8 @@ loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 let vrm = null
 let mixer = null
 let defaultIdleUrl = ""
+let animationToken = 0
+let animationLoadChain = Promise.resolve()
 let vrmHeight = 1.5
 let armSign = 1
 let baseYaw = 0
@@ -173,7 +175,17 @@ async function loadModel(url) {
   if (defaultIdleUrl) void playAnimation(defaultIdleUrl)
 }
 
+function loadAnimationFile(url, token) {
+  const load = animationLoadChain.then(() => {
+    if (token !== animationToken) return null
+    return loader.loadAsync(url)
+  })
+  animationLoadChain = load.catch(() => {})
+  return load
+}
+
 async function playAnimation(url) {
+  const token = ++animationToken
   if (mixer) {
     mixer.stopAllAction()
     try {
@@ -181,13 +193,19 @@ async function playAnimation(url) {
     } catch {}
     mixer = null
   }
-  if (!url || !vrm) return
-  const gltf = await loader.loadAsync(url)
+  if (!url || !vrm) return null
+  const gltf = await loadAnimationFile(url, token).catch(() => null)
+  if (!gltf || token !== animationToken) return null
   const animations = gltf.userData.vrmAnimations
-  if (!animations?.length) return
+  if (!animations?.length) return null
   const clip = createVRMAnimationClip(animations[0], vrm)
   mixer = new THREE.AnimationMixer(vrm.scene)
-  mixer.clipAction(clip).play()
+  const action = mixer.clipAction(clip)
+  // 舞蹈/待机都循环播放；只有 stopDance() 在音乐结束时才会停止
+  action.setLoop(THREE.LoopRepeat, Infinity)
+  action.clampWhenFinished = false
+  action.play()
+  return token
 }
 
 const savedModelUrl = localStorage.getItem("pet.modelUrl") || "./sample.vrm"
@@ -1307,6 +1325,7 @@ function playDefaultIdle() {
 }
 
 function stopDance(showText = true, restoreIdle = true) {
+  animationToken += 1
   const was = dancing
   const wasSinging = singing
   dancing = false
@@ -1359,7 +1378,18 @@ async function startDance() {
   dancing = true
   try {
     await audio.play()
-    await playAnimation(dance.url)
+    const token = await playAnimation(dance.url)
+    if (token == null) {
+      if (danceAudio === audio) {
+        stopDance(false)
+        showBubble("舞蹈动作加载失败")
+      }
+      return
+    }
+    if (danceAudio !== audio || !dancing) {
+      if (danceAudio === audio) stopDance(false)
+      return
+    }
     showBubble(`跳舞中：${dance.name} ♪ ${track.name}`)
   } catch {
     stopDance(false)
@@ -1402,7 +1432,18 @@ async function startSing() {
   singing = true
   try {
     await audio.play()
-    await playAnimation(action.url)
+    const token = await playAnimation(action.url)
+    if (token == null) {
+      if (danceAudio === audio) {
+        stopDance(false)
+        showBubble("唱歌动作加载失败")
+      }
+      return
+    }
+    if (danceAudio !== audio || !dancing) {
+      if (danceAudio === audio) stopDance(false)
+      return
+    }
     showBubble(`唱歌中：${track.name} ♪`)
   } catch {
     stopDance(false)
@@ -1730,13 +1771,14 @@ function animate() {
     scheduleNextTalk()
     void autonomousTalk()
   }
-  if (!mixer && !speaking && animationUrls.length && performance.now() > nextAnim) {
+  if (!mixer && !speaking && !dancing && animationUrls.length && performance.now() > nextAnim) {
     nextAnim = performance.now() + 45000 + Math.random() * 60000
     const url = animationUrls[Math.floor(Math.random() * animationUrls.length)]
     void playAnimation(url)
-      .then(() => {
+      .then((token) => {
+        if (token == null) return
         setTimeout(() => {
-          if (mixer) {
+          if (token === animationToken && !dancing && mixer) {
             mixer.stopAllAction()
             mixer = null
           }
