@@ -1,7 +1,9 @@
-# OpenCode 桌面宠物（VRM）
+# 小尤桌宠（XiaoyouPet）
 
 一个独立运行的透明置顶桌宠，有自己的对话记忆，不会把聊天写入 OpenCode 会话。
 推理通过本地 OpenCode 服务的无状态生成接口完成（`/api/experimental/generate/text`），只借用模型能力。
+
+> 独立发布版（含默认模型和 3 个默认动作）：https://github.com/yb3rd/XiaoyouPet
 
 当前有两套实现：
 
@@ -34,7 +36,7 @@ npm run tauri build
 
 ```bash
 npm run build:debug
-# 然后运行 src-tauri/target/debug/opencode-pet-tauri.exe
+# 然后运行 src-tauri/target/debug/xiaoyou-pet.exe
 ```
 
 > 注意：当前机器 rustc 1.99 的 release 构建会报 core rlib 元数据异常；先用 `build:debug` 产物即可，换其他 Rust stable 工具链后 `tauri build` 可正常打包。
