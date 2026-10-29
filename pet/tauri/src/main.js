@@ -384,6 +384,7 @@ const choiceQuestions = [
   },
   {
     text: "中午想吃点什么？",
+    slots: ["noon"],
     options: [
       { label: "外卖", send: "中午想点外卖" },
       { label: "自己做", send: "中午想自己做饭" },
@@ -392,6 +393,7 @@ const choiceQuestions = [
   },
   {
     text: "晚饭有想好吗？",
+    slots: ["evening"],
     options: [
       { label: "还没想", send: "晚饭还没想好吃什么" },
       { label: "点外卖", send: "晚饭想点外卖" },
@@ -440,6 +442,7 @@ const choiceQuestions = [
   },
   {
     text: "昨晚睡得好吗？",
+    slots: ["morning"],
     options: [
       { label: "很好", send: "我昨晚睡得很好" },
       { label: "一般", send: "我昨晚睡得一般" },
@@ -520,6 +523,7 @@ const choiceQuestions = [
   },
   {
     text: "今天有没有摸鱼？",
+    slots: ["afternoon", "evening"],
     options: [
       { label: "摸了", send: "今天摸鱼了" },
       { label: "没有", send: "今天没有摸鱼" },
@@ -528,6 +532,7 @@ const choiceQuestions = [
   },
   {
     text: "你一般几点睡？",
+    slots: ["night"],
     options: [
       { label: "早点睡", send: "我一般睡得比较早" },
       { label: "十二点", send: "我一般十二点睡" },
@@ -536,6 +541,7 @@ const choiceQuestions = [
   },
   {
     text: "早饭吃了吗？",
+    slots: ["morning"],
     options: [
       { label: "吃了", send: "我吃过早饭了" },
       { label: "没吃", send: "我还没吃早饭" },
@@ -624,6 +630,7 @@ const choiceQuestions = [
   },
   {
     text: "今天有没有遇到好玩的事？",
+    slots: ["afternoon", "evening"],
     options: [
       { label: "有", send: "今天遇到了好玩的事" },
       { label: "没有", send: "今天没遇到什么好玩的事" },
@@ -688,6 +695,7 @@ const choiceQuestions = [
   },
   {
     text: "今天穿什么颜色的衣服？",
+    slots: ["morning", "afternoon"],
     options: [
       { label: "深色", send: "我今天穿的是深色衣服" },
       { label: "浅色", send: "我今天穿的是浅色衣服" },
@@ -710,36 +718,464 @@ const choiceQuestions = [
       { label: "不用", send: "不用啦，我现在挺好" },
     ],
   },
+  {
+    text: "今天有什么安排吗？",
+    slots: ["morning", "afternoon"],
+    options: [
+      { label: "上班", send: "今天要上班" },
+      { label: "学习", send: "今天要学习" },
+      { label: "休息", send: "今天想休息" },
+    ],
+  },
+  {
+    text: "现在在午休吗？",
+    slots: ["noon"],
+    options: [
+      { label: "在休息", send: "我正在午休" },
+      { label: "还在忙", send: "我中午还在忙" },
+      { label: "没午休", send: "我今天没午休" },
+    ],
+  },
+  {
+    text: "下午还要忙吗？",
+    slots: ["afternoon"],
+    options: [
+      { label: "要忙", send: "下午还要忙" },
+      { label: "还好", send: "下午还好，不太忙" },
+      { label: "摸鱼", send: "下午准备摸鱼" },
+    ],
+  },
+  {
+    text: "今天下班了吗？",
+    slots: ["evening"],
+    options: [
+      { label: "下班了", send: "我今天已经下班了" },
+      { label: "还在加班", send: "我还在加班" },
+      { label: "今天休息", send: "我今天休息" },
+    ],
+  },
+  {
+    text: "明天要早起吗？",
+    slots: ["night"],
+    options: [
+      { label: "要早起", send: "明天要早起" },
+      { label: "不用", send: "明天不用早起" },
+      { label: "还没想", send: "明天起不起早还没想好" },
+    ],
+  },
+  {
+    text: "今天最开心的事是什么？",
+    slots: ["evening", "night"],
+    options: [
+      { label: "吃到好吃的", send: "今天吃到好吃的了" },
+      { label: "见到想见的人", send: "今天见到想见的人了" },
+      { label: "有好玩的事", send: "今天遇到了好玩的事" },
+    ],
+  },
+  {
+    text: "最近有想买的东西吗？",
+    options: [
+      { label: "有", send: "最近有想买的东西" },
+      { label: "没有", send: "最近没有想买的东西" },
+      { label: "还没想", send: "还没想好买什么" },
+    ],
+  },
+  {
+    text: "喜欢看什么类型的电影？",
+    options: [
+      { label: "喜剧", send: "我喜欢看喜剧" },
+      { label: "科幻", send: "我喜欢看科幻" },
+      { label: "恐怖", send: "我喜欢看恐怖片" },
+    ],
+  },
+  {
+    text: "最近有想去的地方吗？",
+    options: [
+      { label: "海边", send: "最近想去海边" },
+      { label: "山上", send: "最近想去山上" },
+      { label: "家里", send: "最近只想待在家里" },
+    ],
+  },
+  {
+    text: "今天有没有听歌？",
+    options: [
+      { label: "听了", send: "今天听歌了" },
+      { label: "没听", send: "今天还没听歌" },
+      { label: "想听你唱", action: "sing" },
+    ],
+  },
+  {
+    text: "要不要我给你推荐一首歌？",
+    options: [
+      { label: "🎵 好呀", action: "sing" },
+      { label: "下次吧", send: "下次再听你推荐歌" },
+      { label: "不用", send: "不用推荐啦" },
+    ],
+  },
+  {
+    text: "你最近睡够了吗？",
+    options: [
+      { label: "睡够了", send: "我最近睡够了" },
+      { label: "没睡够", send: "我最近没睡够" },
+      { label: "一般", send: "我最近睡眠一般" },
+    ],
+  },
+  {
+    text: "有没有什么想吐槽的？",
+    slots: ["evening", "night"],
+    options: [
+      { label: "有", send: "我有想吐槽的事" },
+      { label: "没有", send: "暂时没有想吐槽的" },
+      { label: "不想说", send: "我现在不想吐槽" },
+    ],
+  },
+  {
+    text: "今天过得快吗？",
+    slots: ["evening"],
+    options: [
+      { label: "很快", send: "今天过得很快" },
+      { label: "一般", send: "今天过得一般" },
+      { label: "很慢", send: "今天过得很慢" },
+    ],
+  },
+  {
+    text: "最近在学什么新东西吗？",
+    options: [
+      { label: "在学", send: "我最近在学新东西" },
+      { label: "没学", send: "我最近没学什么" },
+      { label: "想学", send: "我最近想学点新东西" },
+    ],
+  },
+  {
+    text: "你喜欢一个人吃饭吗？",
+    options: [
+      { label: "喜欢", send: "我喜欢一个人吃饭" },
+      { label: "不喜欢", send: "我不喜欢一个人吃饭" },
+      { label: "看情况", send: "我一个人吃饭要看情况" },
+    ],
+  },
+  {
+    text: "最近有和朋友出去玩吗？",
+    options: [
+      { label: "有", send: "最近和朋友出去玩了" },
+      { label: "没有", send: "最近没和朋友出去玩" },
+      { label: "想出去", send: "最近想和朋友出去玩" },
+    ],
+  },
+  {
+    text: "你更喜欢计划还是随性？",
+    options: [
+      { label: "计划", send: "我更喜欢提前计划" },
+      { label: "随性", send: "我更喜欢随性一点" },
+      { label: "看情况", send: "计划还是随性要看情况" },
+    ],
+  },
+  {
+    text: "如果现在能瞬移，你想去哪？",
+    options: [
+      { label: "海边", send: "我想瞬移到海边" },
+      { label: "家里", send: "我想瞬移回家" },
+      { label: "随便", send: "随便去哪都行" },
+    ],
+  },
+  {
+    text: "今天有没有被什么逗笑？",
+    options: [
+      { label: "有", send: "今天有被逗笑" },
+      { label: "没有", send: "今天还没被逗笑" },
+      { label: "你逗我", send: "你来逗我笑吧" },
+    ],
+  },
+  {
+    text: "最近有没有想改掉的小习惯？",
+    options: [
+      { label: "有", send: "有想改掉的小习惯" },
+      { label: "没有", send: "暂时没有想改的习惯" },
+      { label: "正在改", send: "我正在改一个小习惯" },
+    ],
+  },
+  {
+    text: "你最近有没有特别想吃的东西？",
+    options: [
+      { label: "火锅", send: "我最近特别想吃火锅" },
+      { label: "甜品", send: "我最近特别想吃甜品" },
+      { label: "随便", send: "我最近吃什么都行" },
+    ],
+  },
+  {
+    text: "你喜欢安静还是热闹？",
+    options: [
+      { label: "安静", send: "我更喜欢安静" },
+      { label: "热闹", send: "我更喜欢热闹" },
+      { label: "看心情", send: "安静还是热闹要看心情" },
+    ],
+  },
+  {
+    text: "今天有没有看到好看的云？",
+    options: [
+      { label: "有", send: "今天看到了好看的云" },
+      { label: "没注意", send: "今天没注意看云" },
+      { label: "你看到了", send: "你看到好看的云了吗" },
+    ],
+  },
+  {
+    text: "最近有没有什么小目标？",
+    options: [
+      { label: "有", send: "我最近有小目标" },
+      { label: "没有", send: "我最近没什么小目标" },
+      { label: "还在想", send: "小目标还在想" },
+    ],
+  },
+  {
+    text: "你最近有没有熬夜？",
+    slots: ["night"],
+    options: [
+      { label: "有", send: "我最近有熬夜" },
+      { label: "没有", send: "我最近没熬夜" },
+      { label: "偶尔", send: "我偶尔会熬夜" },
+    ],
+  },
+  {
+    text: "你最近在看什么书吗？",
+    options: [
+      { label: "在看", send: "我最近在看一本书" },
+      { label: "没看", send: "我最近没看书" },
+      { label: "推荐一本", send: "给我推荐一本书吧" },
+    ],
+  },
+  {
+    text: "你最近有没有做梦？",
+    slots: ["morning"],
+    options: [
+      { label: "有", send: "我最近有做梦" },
+      { label: "没有", send: "我最近没做梦" },
+      { label: "记不清", send: "我记不清有没有做梦" },
+    ],
+  },
+  {
+    text: "现在最想听什么？",
+    options: [
+      { label: "你说话", send: "我现在想听你说话" },
+      { label: "音乐", action: "sing" },
+      { label: "安静", action: "quiet" },
+    ],
+  },
 ]
 
-const eatenChoices = [
-  { label: "吃了", send: "我吃过了" },
-  { label: "还没吃", send: "我还没吃饭" },
-  { label: "你猜", send: "你猜我吃没吃" },
-]
 
-let questionDeck = []
-let lastQuestionText = ""
+const QUESTION_HISTORY_KEY = "pet.questionHistory.v1"
+const QUESTION_KEEP_MS = 60 * 24 * 60 * 60 * 1000
+const QUESTION_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000
+const ANSWERED_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000
+const QUESTION_MIN_GAP_MS = 4 * 60 * 1000
+const QUESTION_TOPIC_WINDOW_MS = 2 * 60 * 60 * 1000
+
+function questionTopic(text) {
+  if (/心情|开心|烦心|累|难过|情绪|过得|吐槽|逗笑|好玩|小目标/.test(text)) return "mood"
+  if (/吃|饭|外卖|奶茶|咖啡|甜|辣|火锅|甜品|零食/.test(text)) return "food"
+  if (/睡|熬夜|早起|午休|休息|做梦|喝水/.test(text)) return "rest"
+  if (/周末|放假|假期|海边|山上|出去玩|想买|瞬移|地方/.test(text)) return "leisure"
+  if (/游戏|番|剧|电影|书|音乐|歌/.test(text)) return "hobby"
+  if (/工作|忙|加班|摸鱼|学习|上班|下班|安排/.test(text)) return "work"
+  if (/颜色|季节|猫|狗|性格|内向|外向|计划|随性|安静|热闹/.test(text)) return "preference"
+  return "general"
+}
+
+function loadQuestionHistory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(QUESTION_HISTORY_KEY) || "[]")
+    if (!Array.isArray(raw)) return []
+    const now = Date.now()
+    return raw
+      .filter((item) => item && typeof item.text === "string" && item.text.trim())
+      .map((item) => ({
+        text: item.text.trim().slice(0, 120),
+        at: Number(item.at) || 0,
+        answered: Boolean(item.answered),
+        answeredAt: Number(item.answeredAt) || 0,
+        topic: item.topic || questionTopic(item.text),
+      }))
+      .filter((item) => now - item.at < QUESTION_KEEP_MS)
+      .slice(-200)
+  } catch {
+    return []
+  }
+}
+
+let questionHistory = loadQuestionHistory()
+let lastQuestionAt = questionHistory.reduce((max, item) => Math.max(max, item.at || 0), 0)
 let pendingChoice = null
 let lastChoiceClick = 0
 
-function nextChoiceQuestion() {
-  if (!questionDeck.length) {
-    questionDeck = choiceQuestions.map((_, index) => index)
-    for (let i = questionDeck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[questionDeck[i], questionDeck[j]] = [questionDeck[j], questionDeck[i]]
-    }
-    if (questionDeck.length > 1 && choiceQuestions[questionDeck[0]].text === lastQuestionText) {
-      ;[questionDeck[0], questionDeck[questionDeck.length - 1]] = [
-        questionDeck[questionDeck.length - 1],
-        questionDeck[0],
-      ]
-    }
+function saveQuestionHistory() {
+  try {
+    localStorage.setItem(QUESTION_HISTORY_KEY, JSON.stringify(questionHistory.slice(-200)))
+  } catch {}
+}
+
+function latestQuestionEntry(text) {
+  const needle = String(text || "").trim()
+  for (let index = questionHistory.length - 1; index >= 0; index--) {
+    if (questionHistory[index].text === needle) return questionHistory[index]
   }
-  const index = questionDeck.pop()
-  const question = choiceQuestions[index]
-  lastQuestionText = question.text
+  return null
+}
+
+function markQuestionAsked(question) {
+  const text = String(question?.text || "").trim()
+  if (!text) return
+  const now = Date.now()
+  const entry = latestQuestionEntry(text)
+  if (entry) {
+    entry.at = now
+    entry.answered = false
+    entry.answeredAt = 0
+    entry.topic = questionTopic(text)
+  } else {
+    questionHistory.push({
+      text,
+      at: now,
+      answered: false,
+      answeredAt: 0,
+      topic: questionTopic(text),
+    })
+  }
+  questionHistory = questionHistory.slice(-200)
+  lastQuestionAt = now
+  saveQuestionHistory()
+}
+
+function markQuestionAnswered(question) {
+  const text = String(question?.text || "").trim()
+  if (!text) return
+  const entry = latestQuestionEntry(text)
+  if (!entry) return
+  entry.answered = true
+  entry.answeredAt = Date.now()
+  saveQuestionHistory()
+}
+
+function questionAllowed() {
+  return Date.now() - lastQuestionAt >= QUESTION_MIN_GAP_MS
+}
+
+function isQuestionCoolingDown(question, now) {
+  const entry = latestQuestionEntry(question.text)
+  if (!entry) return false
+  const cooldown = entry.answered ? ANSWERED_COOLDOWN_MS : QUESTION_COOLDOWN_MS
+  return now - entry.at < cooldown
+}
+
+function recentQuestionTopics(now) {
+  const topics = new Set()
+  for (let index = questionHistory.length - 1; index >= 0; index--) {
+    const entry = questionHistory[index]
+    if (now - entry.at > QUESTION_TOPIC_WINDOW_MS) break
+    topics.add(entry.topic || questionTopic(entry.text))
+  }
+  return topics
+}
+
+function currentTimeSlot() {
+  const hour = new Date().getHours()
+  if (hour < 6) return "night"
+  if (hour < 11) return "morning"
+  if (hour < 14) return "noon"
+  if (hour < 18) return "afternoon"
+  if (hour < 23) return "evening"
+  return "night"
+}
+
+function nextChoiceQuestion() {
+  const now = Date.now()
+  const slot = currentTimeSlot()
+  const recentTopics = recentQuestionTopics(now)
+  const timePool = choiceQuestions.filter(
+    (question) => !question.slots || question.slots.includes(slot),
+  )
+  const basePool = timePool.length ? timePool : choiceQuestions
+  let pool = basePool.filter(
+    (question) =>
+      !isQuestionCoolingDown(question, now) &&
+      !recentTopics.has(questionTopic(question.text)),
+  )
+  if (!pool.length) {
+    pool = basePool.filter((question) => !isQuestionCoolingDown(question, now))
+  }
+  if (!pool.length) {
+    pool = [...basePool]
+      .sort((a, b) => {
+        const aEntry = latestQuestionEntry(a.text)
+        const bEntry = latestQuestionEntry(b.text)
+        return (aEntry?.at || 0) - (bEntry?.at || 0)
+      })
+      .slice(0, 8)
+  }
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
+function parseDynamicQuestion(text) {
+  const raw = String(text || "").replace(/```(?:json)?/gi, "").trim()
+  const start = raw.indexOf("{")
+  const end = raw.lastIndexOf("}")
+  if (start < 0 || end <= start) return null
+  try {
+    const data = JSON.parse(raw.slice(start, end + 1))
+    const question = String(data.question || "")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (!question || question.length > 50) return null
+    const rawOptions = Array.isArray(data.options) ? data.options : []
+    const options = []
+    for (const value of rawOptions) {
+      const label = String(typeof value === "string" ? value : value?.label ?? "")
+        .replace(/^\s*\d+[.、)]\s*/, "")
+        .trim()
+      if (!label || options.some((item) => item.label === label)) continue
+      options.push({ label: label.slice(0, 12), send: label })
+      if (options.length >= 3) break
+    }
+    if (options.length < 2) return null
+    return { text: question, options }
+  } catch {
+    return null
+  }
+}
+
+function dynamicQuestionAlreadyAsked(question) {
+  const needle = question.text.trim().toLowerCase()
+  return questionHistory.some((item) => item.text.trim().toLowerCase() === needle)
+}
+
+async function generateDynamicQuestion() {
+  const now = new Date()
+  const timeText = now.toLocaleString("zh-CN", { hour12: false })
+  const recentQuestions = questionHistory.slice(-12).map((item) => item.text)
+  const recentTopics = [...recentQuestionTopics(Date.now())].join("、") || "无"
+  const prompt = `现在是${timeText}。请像真人一样，结合长期记忆和最近对话，问用户一个自然、具体、轻松的问题，并给出3个简短回答选项。
+要求：
+- 不要重复最近问过的问题，也不要用同义句重复：${recentQuestions.join("；") || "无"}
+- 最近聊过的话题：${recentTopics}
+- 问题不超过25个字，口语化，不要像问卷调查。
+- 选项是用户可能给出的回答，每个不超过8个字。
+- 不要问隐私、沉重或需要长篇回答的问题。
+- 只输出 JSON：{"question":"问题","options":["选项1","选项2","选项3"]}`
+  talkBusy = true
+  let result = null
+  try {
+    result = await invoke("chat", {
+      text: prompt,
+      history: history.slice(-6),
+      model: currentModel(),
+      memory: memoryNotes(),
+      system: "你是桌面宠物小尤，像真人一样聊天。只输出 JSON，不要解释。",
+    }).catch(() => null)
+  } finally {
+    talkBusy = false
+  }
+  if (!result?.ok || !result.text) return null
+  const question = parseDynamicQuestion(result.text)
+  if (!question || dynamicQuestionAlreadyAsked(question)) return null
   return question
 }
 
@@ -775,8 +1211,12 @@ function stopSpeech() {
   speaking = false
 }
 
-async function askChoiceQuestion() {
-  const question = nextChoiceQuestion()
+async function askChoiceQuestion(useDynamic = false) {
+  let question = null
+  if (useDynamic) question = await generateDynamicQuestion()
+  if (!question) question = nextChoiceQuestion()
+  if (!question || autoTalkBlocked()) return
+  markQuestionAsked(question)
   showBubble(question.text)
   showChoices(question.text, question.options)
   speak(question.text)
@@ -806,6 +1246,7 @@ async function chooseOption(index) {
   const { question, options } = pendingChoice
   const option = options[index]
   if (!option) return
+  markQuestionAnswered(question)
   hideChoices()
   stopSpeech()
   if (option.action) {
@@ -985,7 +1426,38 @@ async function updateMemory() {
   }
 }
 
+function seedQuestionHistoryFromMemory() {
+  const now = Date.now()
+  const known = new Set(questionHistory.map((item) => item.text))
+  const recent = history.slice(-40)
+  let added = 0
+  for (let index = 0; index < recent.length; index++) {
+    const item = recent[index]
+    if (item.role !== "assistant") continue
+    const text = String(item.content || "").trim()
+    if (!text.endsWith("？") || text.length > 80 || known.has(text)) continue
+    const next = recent[index + 1]
+    const answered = next?.role === "user"
+    const at = now - (recent.length - index) * 5 * 60 * 1000
+    questionHistory.push({
+      text,
+      at,
+      answered,
+      answeredAt: answered ? at + 60 * 1000 : 0,
+      topic: questionTopic(text),
+    })
+    known.add(text)
+    added += 1
+  }
+  if (added) {
+    questionHistory = questionHistory.slice(-200)
+    lastQuestionAt = questionHistory.reduce((max, item) => Math.max(max, item.at || 0), 0)
+    saveQuestionHistory()
+  }
+}
+
 await loadMemory()
+seedQuestionHistoryFromMemory()
 
 function currentModel() {
   const value = localStorage.getItem("pet.model") || ""
@@ -995,8 +1467,8 @@ function currentModel() {
 
 const talkKindWeights = [
   ["greeting", 3],
-  ["eaten", 2],
-  ["weather", 2],
+  ["comment", 5],
+  ["weather", 1],
   ["ai-news", 1],
   ["world-news", 1],
   ["anime-news", 1],
@@ -1005,6 +1477,7 @@ const talkKindWeights = [
 ]
 
 let lastTalkKind = ""
+let lastNewsAt = 0
 
 function pickTalkKind() {
   const pool = []
@@ -1015,15 +1488,20 @@ function pickTalkKind() {
   if (kind === lastTalkKind && pool.length > 1) {
     kind = pool[Math.floor(Math.random() * pool.length)]
   }
+  if (kind.endsWith("news") && Date.now() - lastNewsAt < 15 * 60 * 1000) {
+    kind = "comment"
+  }
+  if (kind.endsWith("news")) lastNewsAt = Date.now()
   lastTalkKind = kind
   return kind
 }
 
 async function autonomousTalk(manual = false, forcedKind = "") {
   if (!manual && autoTalkBlocked()) return
-  if (!forcedKind && Math.random() < 0.55) {
+  if (!forcedKind && Math.random() < 0.34 && (manual || questionAllowed())) {
     if (manual) scheduleNextTalk()
-    await askChoiceQuestion()
+    const useDynamic = Math.random() < 0.6
+    await askChoiceQuestion(useDynamic)
     return
   }
   const kind = forcedKind || pickTalkKind()
@@ -1031,9 +1509,10 @@ async function autonomousTalk(manual = false, forcedKind = "") {
   let prompt
   let pendingNews = null
   if (kind === "greeting") {
-    prompt = "用一句自然、亲切的中文向用户打招呼，像桌面宠物一样，不要超过20个字。"
-  } else if (kind === "eaten") {
-    prompt = "用一句自然的中文问用户吃饭了没有，关心但不要啰嗦，不要超过20个字。"
+    prompt = "用一句自然、亲切的中文向用户打招呼，像桌面宠物一样，不要提问，不要超过20个字。"
+  } else if (kind === "comment") {
+    prompt =
+      "像真人一样，结合当前时间和长期记忆，用一句自然、口语化的中文说一句日常观察、关心或轻松吐槽。绝对不要提问，不要使用问号，不要超过25个字。"
   } else {
     const topic = await invoke("topic", { kind }).catch(() => null)
     if (!topic?.ok) {
@@ -1070,7 +1549,6 @@ async function autonomousTalk(manual = false, forcedKind = "") {
     lastText = cleanText(result.text)
     showBubble(lastText)
     if (pendingNews) showNewsButton(pendingNews.items, pendingNews.title)
-    if (kind === "eaten") showChoices(lastText, eatenChoices)
     speak(lastText)
   } else if (manual) {
     lastText = "我现在还没想好说什么，稍后再聊吧。"
@@ -1185,11 +1663,14 @@ async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   if (!text) return
   if (rawText == null) promptInput.value = ""
   composer.classList.add("hidden")
+  const openQuestion = pendingChoice?.question || null
   const songRequest = parseSongRequest(text)
   if (songRequest) {
     await playRequestedSong(songRequest, text)
     return
   }
+  if (openQuestion) markQuestionAnswered(openQuestion)
+  const answeredQuestion = contextQuestion || openQuestion
   showBubble(`你：${displayText || text}`)
   const outgoingHistory = contextQuestion
     ? [...history, { role: "assistant", content: contextQuestion }]
@@ -1208,7 +1689,7 @@ async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   }
   if (!result?.ok || !result.text) {
     showBubble(`回复失败：${result?.error || result?.status || "未知错误"}`)
-    scheduleNextTalk()
+    scheduleNextTalk(answeredQuestion ? 150000 + Math.random() * 120000 : undefined)
     return
   }
   if (contextQuestion) history.push({ role: "assistant", content: contextQuestion })
@@ -1221,7 +1702,7 @@ async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   lastText = cleanText(result.text)
   showBubble(lastText)
   speak(lastText)
-  scheduleNextTalk()
+  scheduleNextTalk(answeredQuestion ? 150000 + Math.random() * 120000 : undefined)
 }
 
 let models = []
