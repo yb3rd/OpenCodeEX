@@ -431,7 +431,7 @@ function createDropdown(root, options, value, onChange) {
     closeAllDropdowns(list)
     const rect = trigger.getBoundingClientRect()
     const below = window.innerHeight - rect.bottom - 8
-    const above = rect.top - 8
+    const above = rect.top - 8 - 28
     const openUp = below < Math.min(220, above)
     list.classList.toggle("up", openUp)
     list.style.maxHeight = `${Math.max(80, Math.min(220, openUp ? above : below))}px`
@@ -647,7 +647,7 @@ window.addEventListener("contextmenu", (event) => {
   const width = menu.offsetWidth
   const height = menu.offsetHeight
   menu.style.left = `${Math.max(6, Math.min(event.clientX, window.innerWidth - width - 6))}px`
-  menu.style.top = `${Math.max(6, Math.min(event.clientY, window.innerHeight - height - 6))}px`
+  menu.style.top = `${Math.max(30, Math.min(event.clientY, window.innerHeight - height - 6))}px`
 })
 
 window.addEventListener("dblclick", (event) => {
@@ -674,7 +674,7 @@ menu.addEventListener("click", (event) => {
     }
     const rect = menu.getBoundingClientRect()
     const overflow = rect.bottom - window.innerHeight + 6
-    if (overflow > 0) menu.style.top = `${Math.max(6, rect.top - overflow)}px`
+    if (overflow > 0) menu.style.top = `${Math.max(30, rect.top - overflow)}px`
     return
   }
   closeMenu()
@@ -734,7 +734,7 @@ function publishZones() {
     !menu.classList.contains("hidden") ||
     document.querySelector(".dd-list:not(.hidden)")
   ) {
-    void invoke("set_zones", { zones: [{ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }] })
+    void invoke("set_zones", { zones: [{ x: 0, y: 28, w: window.innerWidth, h: window.innerHeight - 28 }] })
     return
   }
 
@@ -742,9 +742,9 @@ function publishZones() {
   const canvasRect = canvas.getBoundingClientRect()
   zones.push({
     x: canvasRect.left + 20,
-    y: canvasRect.top,
+    y: canvasRect.top + 28,
     w: canvasRect.width - 40,
-    h: canvasRect.height,
+    h: canvasRect.height - 28,
   })
 
   if (!bubble.classList.contains("hidden")) {

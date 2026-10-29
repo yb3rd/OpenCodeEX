@@ -639,6 +639,10 @@ fn ensure_frameless(window: &WebviewWindow) {
 
 #[cfg(windows)]
 fn remove_window_frame(window: &WebviewWindow) {
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    use windows_sys::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE, RDW_UPDATENOW,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetWindowLongW, SetWindowLongW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOMOVE,
         SWP_NOSIZE, SWP_NOZORDER, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
@@ -662,6 +666,17 @@ fn remove_window_frame(window: &WebviewWindow) {
             0,
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+        );
+
+        // DWM can keep drawing a cached non-client title bar even after WS_CAPTION
+        // is removed, especially while the window is inactive. Disable NC rendering.
+        let value: u32 = 1; // DWMNCRP_DISABLED
+        DwmSetWindowAttribute(hwnd.0 as _, 2, &value as *const u32 as *const _, 4);
+        RedrawWindow(
+            hwnd.0 as _,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW | RDW_ALLCHILDREN,
         );
     }
 }
@@ -760,6 +775,14 @@ pub fn run() {
                 #[cfg(windows)]
                 remove_window_frame(&window);
                 place_bottom_right(&window);
+
+                let win_events = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(_) = event {
+                        #[cfg(windows)]
+                        remove_window_frame(&win_events);
+                    }
+                });
 
                 #[cfg(windows)]
                 {
