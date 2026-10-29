@@ -98,6 +98,10 @@ fn animations_dir(app: &AppHandle) -> PathBuf {
     asset_root(app).join("animations")
 }
 
+fn music_dir(app: &AppHandle) -> PathBuf {
+    asset_root(app).join("mp3")
+}
+
 fn list_files(dir: &Path, ext: &str) -> Vec<FileEntry> {
     let mut list = Vec::new();
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -139,6 +143,13 @@ fn list_animations(app: AppHandle) -> Vec<FileEntry> {
     let dir = animations_dir(&app);
     let _ = std::fs::create_dir_all(&dir);
     list_files(&dir, "vrma")
+}
+
+#[tauri::command]
+fn list_music(app: AppHandle) -> Vec<FileEntry> {
+    let dir = music_dir(&app);
+    let _ = std::fs::create_dir_all(&dir);
+    list_files(&dir, "mp3")
 }
 
 #[tauri::command]
@@ -838,6 +849,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let _ = std::fs::create_dir_all(models_dir(&handle));
             let _ = std::fs::create_dir_all(animations_dir(&handle));
+            let _ = std::fs::create_dir_all(music_dir(&handle));
 
             let click_item = CheckMenuItem::with_id(
                 app,
@@ -876,6 +888,7 @@ pub fn run() {
             list_models,
             list_model_files,
             list_animations,
+            list_music,
             pick_animation,
             open_models,
             topic,

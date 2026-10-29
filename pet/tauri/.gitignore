@@ -9,3 +9,4 @@ src-tauri/.cargo/
 src-tauri/cargo-*.log
 conv/
 convert-bvh.mjs
+mp3/*.mp3

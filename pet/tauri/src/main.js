@@ -255,6 +255,7 @@ async function speakNext() {
 function openComposer() {
   settings.classList.add("hidden")
   menu.classList.add("hidden")
+  bubble.classList.add("hidden")
   composer.classList.remove("hidden")
   promptInput.focus()
 }
@@ -278,7 +279,7 @@ function currentModel() {
 }
 
 async function autonomousTalk(manual = false) {
-  if (!manual && (speaking || !composer.classList.contains("hidden") || !settings.classList.contains("hidden"))) return
+  if (!manual && (speaking || dancing || !composer.classList.contains("hidden") || !settings.classList.contains("hidden"))) return
   const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news", "anime-news", "game-news", "acg-news"]
   const kind = kinds[Math.floor(Math.random() * kinds.length)]
   let prompt
@@ -495,6 +496,7 @@ function renderModelMenu() {
 }
 
 async function switchModel(url, name) {
+  if (dancing) stopDance(false)
   localStorage.setItem("pet.modelUrl", url)
   showBubble(`正在切换到 ${name}…`)
   try {
@@ -525,6 +527,7 @@ function renderAnimMenu() {
     button.addEventListener("click", (event) => {
       event.stopPropagation()
       closeMenu()
+      if (dancing) stopDance(false)
       void playAnimation(item.url)
       showBubble(item.url ? `动作：${item.name}` : "已恢复自然站立")
     })
@@ -532,7 +535,68 @@ function renderAnimMenu() {
   }
 }
 
+let danceAudio = null
+let dancing = false
+
+function stopDance(showText = true) {
+  const was = dancing
+  dancing = false
+  if (danceAudio) {
+    danceAudio.onended = null
+    danceAudio.onerror = null
+    danceAudio.pause()
+    danceAudio.currentTime = 0
+    danceAudio = null
+  }
+  if (was && mixer) {
+    mixer.stopAllAction()
+    mixer = null
+  }
+  if (showText && was) showBubble("已停止跳舞")
+}
+
+async function startDance() {
+  stopDance(false)
+  const tracks = (await invoke("list_music")) || []
+  if (!tracks.length) {
+    showBubble("mp3 文件夹里没有音乐")
+    return
+  }
+  const dances = animationFiles.filter((item) => /^dance/i.test(item.name))
+  if (!dances.length) {
+    showBubble("animations 里没有舞蹈动作")
+    return
+  }
+  const track = tracks[Math.floor(Math.random() * tracks.length)]
+  const dance = dances[Math.floor(Math.random() * dances.length)]
+  const audio = new Audio(convertFileSrc(track.path))
+  audio.volume = 0.55
+  audio.onended = () => {
+    if (danceAudio === audio) {
+      stopDance(false)
+      showBubble("音乐结束，停止跳舞")
+    }
+  }
+  audio.onerror = () => {
+    if (danceAudio === audio) {
+      stopDance(false)
+      showBubble("音乐播放失败")
+    }
+  }
+  danceAudio = audio
+  dancing = true
+  try {
+    await audio.play()
+    await playAnimation(dance.url)
+    showBubble(`跳舞中：${dance.name} ♪ ${track.name}`)
+  } catch {
+    stopDance(false)
+    showBubble("音乐播放失败")
+  }
+}
+
 function randomAction() {
+  if (dancing) stopDance(false)
   const pool = animationFiles.filter((item) => item.url && !/^(grabbed|[a-e])$/i.test(item.name))
   if (!pool.length) return
   const choices = pool.length > 1 ? pool.filter((item) => item.name !== lastRandomAction) : pool
@@ -612,6 +676,7 @@ function fillModels() {
 async function openSettings() {
   composer.classList.add("hidden")
   menu.classList.add("hidden")
+  bubble.classList.add("hidden")
   settings.classList.toggle("hidden")
   if (settings.classList.contains("hidden")) return
   settings.scrollTop = 0
@@ -652,7 +717,8 @@ window.addEventListener("contextmenu", (event) => {
 
 window.addEventListener("dblclick", (event) => {
   if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
-  randomAction()
+  if (dancing) stopDance()
+  else randomAction()
 })
 
 menu.addEventListener("click", (event) => {
@@ -690,22 +756,24 @@ menu.addEventListener("click", (event) => {
     refreshMenu()
     showBubble(next ? "已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭" : "已关闭点击穿透")
   }
-  else if (action === "models") void invoke("open_models")
-  else if (action === "importAnim") {
-    void (async () => {
-      const picked = await invoke("pick_animation")
-      if (!picked) return
-      await playAnimation(convertFileSrc(picked.path))
-      await loadAnimationList()
-      showBubble(`已导入动作：${picked.name}`)
-    })()
-  }
+  else if (action === "dance") void startDance()
   else if (action === "quit") appWindow.close()
 })
+
+async function importAnimation() {
+  const picked = await invoke("pick_animation")
+  if (!picked) return
+  if (dancing) stopDance(false)
+  await playAnimation(convertFileSrc(picked.path))
+  await loadAnimationList()
+  showBubble(`已导入动作：${picked.name}`)
+}
 
 sendButton.addEventListener("click", () => void sendPrompt())
 document.getElementById("composer-close").addEventListener("click", () => composer.classList.add("hidden"))
 document.getElementById("settings-close").addEventListener("click", () => settings.classList.add("hidden"))
+document.getElementById("settings-models").addEventListener("click", () => void invoke("open_models"))
+document.getElementById("settings-importAnim").addEventListener("click", () => void importAnimation())
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -723,7 +791,7 @@ promptInput.addEventListener("keydown", (event) => {
   }
 })
 
-let dragging = false
+let dragOrigin = null
 
 let lastInteractive = null
 
@@ -784,13 +852,19 @@ window.addEventListener("mousedown", (event) => {
   }
   if (event.button !== 0) return
   if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
-  dragging = true
-  void appWindow.startDragging()
+  dragOrigin = { x: event.clientX, y: event.clientY }
   event.preventDefault()
 })
 
+window.addEventListener("mousemove", (event) => {
+  if (!dragOrigin) return
+  if (Math.hypot(event.clientX - dragOrigin.x, event.clientY - dragOrigin.y) < 4) return
+  dragOrigin = null
+  void appWindow.startDragging()
+})
+
 window.addEventListener("mouseup", () => {
-  dragging = false
+  dragOrigin = null
 })
 
 window.addEventListener("mousedown", () => {
