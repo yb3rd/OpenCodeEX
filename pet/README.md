@@ -39,6 +39,10 @@ npm run build:debug
 
 > 注意：当前机器 rustc 1.99 的 release 构建会报 core rlib 元数据异常；先用 `build:debug` 产物即可，换其他 Rust stable 工具链后 `tauri build` 可正常打包。
 
+### 便携版
+
+`OpenCodePet.exe` 会优先使用**同目录**下的 `models/` 和 `animations/`。把 exe 和这两个文件夹放在一起，整个目录可以随意移动，双击即可运行。
+
 首次运行前准备模型与动作（均不入库）：
 
 ```text

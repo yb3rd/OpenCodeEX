@@ -69,6 +69,13 @@ fn asset_root(app: &AppHandle) -> PathBuf {
             return PathBuf::from(dir);
         }
     }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            if dir.join("models").is_dir() || dir.join("animations").is_dir() {
+                return dir.to_path_buf();
+            }
+        }
+    }
     if let Some(root) = project_root() {
         return root;
     }
