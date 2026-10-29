@@ -15,13 +15,13 @@ const sendButton = document.getElementById("send")
 const settings = document.getElementById("settings")
 const ddMode = document.getElementById("dd-mode")
 const ddModel = document.getElementById("dd-model")
-const ddAnim = document.getElementById("dd-anim")
 const ddVoice = document.getElementById("dd-voice")
 const ddRate = document.getElementById("dd-rate")
 const ddPitch = document.getElementById("dd-pitch")
 const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
 const menuModelList = document.getElementById("model-list")
+const menuAnimList = document.getElementById("anim-list")
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -509,19 +509,40 @@ async function loadModelFiles() {
   renderModelMenu()
 }
 
-const animDropdown = createDropdown(ddAnim, [{ value: "", label: "无（自然站立）" }], "", (url) => {
-  void playAnimation(url)
-  setTimeout(() => settings.classList.add("hidden"), 120)
-})
+let animationFiles = []
+
+function renderAnimMenu() {
+  if (!menuAnimList) return
+  menuAnimList.innerHTML = ""
+  const items = [{ name: "无（自然站立）", url: "" }, ...animationFiles]
+  for (const item of items) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.textContent = item.name
+    button.addEventListener("click", (event) => {
+      event.stopPropagation()
+      closeMenu()
+      void playAnimation(item.url)
+      showBubble(item.url ? `动作：${item.name}` : "已恢复自然站立")
+    })
+    menuAnimList.append(button)
+  }
+}
 
 async function loadAnimationList() {
   const list = (await invoke("list_animations")) || []
-  animationUrls = list.map((item) => convertFileSrc(item.path))
-  const options = [
-    { value: "", label: "无（自然站立）" },
-    ...list.map((item) => ({ value: convertFileSrc(item.path), label: item.name })),
-  ]
-  animDropdown.setOptions(options)
+  const priority = ["idle-maid", "idle-sitting", "FancyDressParty", "Reading (Loop)", "grabbed"]
+  animationFiles = list
+    .map((item) => ({ name: item.name, url: convertFileSrc(item.path) }))
+    .sort((a, b) => {
+      const ai = priority.indexOf(a.name)
+      const bi = priority.indexOf(b.name)
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.name.localeCompare(b.name)
+    })
+  animationUrls = list
+    .filter((item) => !/^(grabbed|[a-e])$/i.test(item.name))
+    .map((item) => convertFileSrc(item.path))
+  renderAnimMenu()
 }
 
 const voiceDropdown = createDropdown(
@@ -591,7 +612,9 @@ window.addEventListener("contextmenu", (event) => {
   event.preventDefault()
   refreshMenu()
   renderModelMenu()
+  renderAnimMenu()
   menuModelList?.classList.add("hidden")
+  menuAnimList?.classList.add("hidden")
   menu.classList.remove("hidden")
   const width = menu.offsetWidth
   const height = menu.offsetHeight
@@ -608,9 +631,19 @@ menu.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]")
   if (!button) return
   const action = button.dataset.action
-  if (action === "switchModel") {
-    renderModelMenu()
-    menuModelList?.classList.toggle("hidden")
+  if (action === "switchModel" || action === "switchAnim") {
+    if (action === "switchModel") {
+      renderModelMenu()
+      menuAnimList?.classList.add("hidden")
+      menuModelList?.classList.toggle("hidden")
+    } else {
+      renderAnimMenu()
+      menuModelList?.classList.add("hidden")
+      menuAnimList?.classList.toggle("hidden")
+    }
+    if (!menuModelList?.classList.contains("hidden") || !menuAnimList?.classList.contains("hidden")) {
+      menu.scrollTop = Math.max(0, button.offsetTop - 30)
+    }
     const rect = menu.getBoundingClientRect()
     const overflow = rect.bottom - window.innerHeight + 6
     if (overflow > 0) menu.style.top = `${Math.max(6, rect.top - overflow)}px`
@@ -629,7 +662,6 @@ menu.addEventListener("click", (event) => {
       if (!picked) return
       await playAnimation(convertFileSrc(picked.path))
       await loadAnimationList()
-      animDropdown.setValue(convertFileSrc(picked.path))
       showBubble(`已导入动作：${picked.name}`)
     })()
   }

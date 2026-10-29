@@ -93,6 +93,7 @@ body {
 }
 
 .settings {
+  box-sizing: border-box;
   position: absolute;
   right: 8px;
   bottom: 10px;
@@ -122,7 +123,9 @@ body {
 }
 
 .settings label span {
-  width: 40px;
+  width: 56px;
+  white-space: nowrap;
+  flex-shrink: 0;
   opacity: 0.7;
 }
 
