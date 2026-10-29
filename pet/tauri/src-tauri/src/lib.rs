@@ -57,6 +57,16 @@ struct ModelEntry {
     name: String,
 }
 
+#[derive(Serialize, Clone)]
+struct NewsItem {
+    title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    meta: Option<String>,
+}
+
 fn project_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let mut cur = exe.parent()?.to_path_buf();
@@ -234,6 +244,30 @@ fn open_models(app: AppHandle) -> bool {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+    }
+    true
+}
+
+#[tauri::command]
+fn open_url(url: String) -> bool {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .creation_flags(0x08000000)
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(&url).spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     }
     true
 }
@@ -421,7 +455,7 @@ async fn fetch_text(url: &str) -> Result<String, String> {
     response.text().await.map_err(|error| error.to_string())
 }
 
-async fn bilibili_rank(rid: u32) -> Result<Vec<String>, String> {
+async fn bilibili_rank(rid: u32) -> Result<Vec<NewsItem>, String> {
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         .timeout(std::time::Duration::from_secs(15))
@@ -438,18 +472,37 @@ async fn bilibili_rank(rid: u32) -> Result<Vec<String>, String> {
         .json::<serde_json::Value>()
         .await
         .map_err(|error| error.to_string())?;
-    let items = json
+    let mut items = json
         .get("data")
         .and_then(|data| data.get("list"))
         .and_then(|list| list.as_array())
         .map(|list| {
             list.iter()
-                .filter_map(|item| item.get("title").and_then(|value| value.as_str()))
-                .filter(|title| !title.trim().is_empty())
-                .map(|title| title.to_string())
+                .filter_map(|item| {
+                    let title = item.get("title")?.as_str()?.trim().to_string();
+                    if title.is_empty() {
+                        return None;
+                    }
+                    let owner = item
+                        .get("owner")
+                        .and_then(|owner| owner.get("name"))
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("B站");
+                    let url = item
+                        .get("bvid")
+                        .and_then(|value| value.as_str())
+                        .map(|bvid| format!("https://www.bilibili.com/video/{bvid}"));
+                    Some(NewsItem {
+                        title,
+                        url,
+                        source: "B站".to_string(),
+                        meta: Some(owner.to_string()),
+                    })
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    items.truncate(6);
     if items.is_empty() {
         return Err("empty".into());
     }
@@ -464,31 +517,67 @@ fn decode_entities(text: &str) -> String {
         .replace("&#39;", "'")
 }
 
-async fn rss_titles(url: &str, limit: usize) -> Result<Vec<String>, String> {
+fn extract_tag(block: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = block.find(&open)? + open.len();
+    let after = &block[start..];
+    let end = after.find(&close)?;
+    let raw = after[..end].trim();
+    let raw = raw.strip_prefix("<![CDATA[").unwrap_or(raw);
+    let raw = raw.strip_suffix("]]>").unwrap_or(raw).trim();
+    Some(decode_entities(raw))
+}
+
+fn strip_html(text: &str) -> String {
+    let mut out = String::new();
+    let mut inside = false;
+    for ch in text.chars() {
+        match ch {
+            '<' => inside = true,
+            '>' => {
+                inside = false;
+                out.push(' ');
+            }
+            _ if !inside => out.push(ch),
+            _ => {}
+        }
+    }
+    decode_entities(&out.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+async fn rss_news(url: &str, limit: usize) -> Result<Vec<NewsItem>, String> {
     let xml = fetch_text(url).await?;
     let mut items = Vec::new();
     let mut rest = xml.as_str();
     while let Some(start) = rest.find("<item>") {
-        rest = &rest[start..];
-        let Some(title_at) = rest.find("<title>") else {
+        let Some(end) = rest[start..].find("</item>") else {
             break;
         };
-        let after = &rest[title_at + 7..];
-        let Some(end) = after.find("</title>") else {
-            break;
-        };
-        let raw = after[..end].trim();
-        let raw = raw.strip_prefix("<![CDATA[").unwrap_or(raw);
-        let raw = raw.strip_suffix("]]>").unwrap_or(raw).trim();
-        if !raw.is_empty() {
-            items.push(decode_entities(raw));
+        let block = &rest[start..start + end + 7];
+        if let Some(title) = extract_tag(block, "title") {
+            if !title.trim().is_empty() {
+                let link = extract_tag(block, "link")
+                    .filter(|value| value.starts_with("http://") || value.starts_with("https://"));
+                let meta = extract_tag(block, "description").map(|text| {
+                    let text = strip_html(&text);
+                    if text.chars().count() > 140 {
+                        format!("{}…", text.chars().take(140).collect::<String>())
+                    } else {
+                        text
+                    }
+                });
+                items.push(NewsItem {
+                    title,
+                    url: link,
+                    source: "机核".to_string(),
+                    meta,
+                });
+            }
         }
+        rest = &rest[start + end + 7..];
         if items.len() >= limit {
             break;
-        }
-        match rest.find("</item>") {
-            Some(next) => rest = &rest[next + 7..],
-            None => break,
         }
     }
     if items.is_empty() {
@@ -498,7 +587,7 @@ async fn rss_titles(url: &str, limit: usize) -> Result<Vec<String>, String> {
     }
 }
 
-async fn hacker_news(query: &str, tags: &str, limit: u32) -> Result<Vec<String>, String> {
+async fn hacker_news(query: &str, tags: &str, limit: u32) -> Result<Vec<NewsItem>, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -522,13 +611,54 @@ async fn hacker_news(query: &str, tags: &str, limit: u32) -> Result<Vec<String>,
         .and_then(|value| value.as_array())
         .map(|hits| {
             hits.iter()
-                .filter_map(|hit| hit.get("title").and_then(|value| value.as_str()))
-                .filter(|title| !title.trim().is_empty() && !title.contains("HN is for"))
-                .map(|title| title.to_string())
+                .filter_map(|hit| {
+                    let title = hit.get("title")?.as_str()?.trim().to_string();
+                    if title.is_empty() || title.contains("HN is for") {
+                        return None;
+                    }
+                    let object_id = hit
+                        .get("objectID")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default();
+                    let url = hit
+                        .get("url")
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.to_string())
+                        .or_else(|| {
+                            if object_id.is_empty() {
+                                None
+                            } else {
+                                Some(format!("https://news.ycombinator.com/item?id={object_id}"))
+                            }
+                        });
+                    let points = hit
+                        .get("points")
+                        .and_then(|value| value.as_i64())
+                        .unwrap_or(0);
+                    let comments = hit
+                        .get("num_comments")
+                        .and_then(|value| value.as_i64())
+                        .unwrap_or(0);
+                    Some(NewsItem {
+                        title,
+                        url,
+                        source: "Hacker News".to_string(),
+                        meta: Some(format!("{points} points · {comments} comments")),
+                    })
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
     Ok(items)
+}
+
+fn news_response(mut details: Vec<NewsItem>, limit: usize) -> serde_json::Value {
+    details.truncate(limit);
+    let items = details
+        .iter()
+        .map(|item| item.title.clone())
+        .collect::<Vec<_>>();
+    json!({ "ok": true, "items": items, "details": details })
 }
 
 #[tauri::command]
@@ -539,35 +669,23 @@ async fn topic(kind: String) -> serde_json::Value {
             Err(error) => json!({ "ok": false, "error": error }),
         },
         "ai-news" => match hacker_news("AI", "story", 12).await {
-            Ok(mut items) => {
-                items.truncate(3);
-                json!({ "ok": true, "items": items })
-            }
+            Ok(details) => news_response(details, 3),
             Err(error) => json!({ "ok": false, "error": error }),
         },
         "world-news" => match hacker_news("", "front_page", 8).await {
-            Ok(mut items) => {
-                items.truncate(4);
-                json!({ "ok": true, "items": items })
-            }
+            Ok(details) => news_response(details, 4),
             Err(error) => json!({ "ok": false, "error": error }),
         },
         "anime-news" => match bilibili_rank(1).await {
-            Ok(mut items) => {
-                items.truncate(4);
-                json!({ "ok": true, "items": items })
-            }
+            Ok(details) => news_response(details, 4),
             Err(error) => json!({ "ok": false, "error": error }),
         },
         "game-news" => match bilibili_rank(4).await {
-            Ok(mut items) => {
-                items.truncate(4);
-                json!({ "ok": true, "items": items })
-            }
+            Ok(details) => news_response(details, 4),
             Err(error) => json!({ "ok": false, "error": error }),
         },
-        "acg-news" => match rss_titles("https://www.gcores.com/rss", 4).await {
-            Ok(items) => json!({ "ok": true, "items": items }),
+        "acg-news" => match rss_news("https://www.gcores.com/rss", 4).await {
+            Ok(details) => news_response(details, 4),
             Err(error) => json!({ "ok": false, "error": error }),
         },
         _ => json!({ "ok": false }),
@@ -936,6 +1054,7 @@ pub fn run() {
             list_music,
             load_memory,
             save_memory,
+            open_url,
             pick_animation,
             open_models,
             topic,

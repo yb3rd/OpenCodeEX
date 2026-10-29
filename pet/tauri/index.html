@@ -8,6 +8,7 @@
   <body>
     <div class="bubble-area">
       <div id="bubble" class="bubble hidden"></div>
+      <button id="news-more" class="news-more hidden">📰 详细</button>
     </div>
     <canvas id="view"></canvas>
 
@@ -17,8 +18,7 @@
       <button id="composer-close" title="关闭">✕</button>
     </div>
 
-    <div id="settings" class="settings hidden">
-      <button id="settings-close" class="settings-close" title="关闭">✕</button>
+    <div id="settings" class="settings hidden">      <button id="settings-close" class="settings-close" title="关闭">✕</button>
       <div class="settings-title">设置 <span class="build">v2026.10.29</span></div>
       <label>
         <span>来源</span>
@@ -45,6 +45,14 @@
         <button id="settings-importAnim">📥 导入动作</button>
       </div>
       <div id="settings-hint" class="hint"></div>
+    </div>
+
+    <div id="news-detail" class="news-detail hidden">
+      <div class="news-head">
+        <span id="news-title">新闻详情</span>
+        <button id="news-close" title="关闭">✕</button>
+      </div>
+      <div id="news-list"></div>
     </div>
 
     <div id="menu" class="context-menu hidden">

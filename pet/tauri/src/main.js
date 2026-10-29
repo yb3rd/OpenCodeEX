@@ -23,6 +23,10 @@ const settingsHint = document.getElementById("settings-hint")
 const menu = document.getElementById("menu")
 const menuModelList = document.getElementById("model-list")
 const menuAnimList = document.getElementById("anim-list")
+const newsMore = document.getElementById("news-more")
+const newsDetail = document.getElementById("news-detail")
+const newsList = document.getElementById("news-list")
+const newsTitle = document.getElementById("news-title")
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -232,7 +236,51 @@ function showBubble(text) {
   bubble.textContent = text
   bubble.classList.remove("hidden")
   hiddenAt = performance.now() + 20000
+  newsMore.classList.add("hidden")
 }
+
+let newsData = { title: "", items: [] }
+
+function showNewsButton(items, title) {
+  newsData = { title: title || "新闻详情", items: Array.isArray(items) ? items : [] }
+  if (!newsData.items.length) return
+  newsMore.classList.remove("hidden")
+}
+
+function openNewsDetail() {
+  if (!newsData.items.length) return
+  newsTitle.textContent = newsData.title || "新闻详情"
+  newsList.innerHTML = ""
+  for (const item of newsData.items) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "news-item"
+    const title = document.createElement("span")
+    title.className = "news-item-title"
+    title.textContent = item.title || ""
+    const meta = document.createElement("span")
+    meta.className = "news-item-meta"
+    meta.textContent = [item.source, item.meta].filter(Boolean).join(" · ")
+    button.append(title, meta)
+    if (item.url) {
+      button.addEventListener("click", () => void invoke("open_url", { url: item.url }))
+    } else {
+      button.disabled = true
+    }
+    newsList.append(button)
+  }
+  newsDetail.classList.remove("hidden")
+  newsMore.classList.add("hidden")
+}
+
+function closeNewsDetail() {
+  newsDetail.classList.add("hidden")
+}
+
+newsMore.addEventListener("click", (event) => {
+  event.stopPropagation()
+  openNewsDetail()
+})
 
 let voiceOn = localStorage.getItem("pet.voice.v3") !== "0"
 
@@ -326,6 +374,7 @@ function openComposer() {
   settings.classList.add("hidden")
   menu.classList.add("hidden")
   bubble.classList.add("hidden")
+  closeNewsDetail()
   composer.classList.remove("hidden")
   promptInput.focus()
 }
@@ -403,6 +452,7 @@ async function autonomousTalk(manual = false) {
   const kinds = ["greeting", "eaten", "weather", "ai-news", "world-news", "anime-news", "game-news", "acg-news"]
   const kind = kinds[Math.floor(Math.random() * kinds.length)]
   let prompt
+  let pendingNews = null
   if (kind === "greeting") {
     prompt = "用一句自然、亲切的中文向用户打招呼，像桌面宠物一样，不要超过20个字。"
   } else if (kind === "eaten") {
@@ -428,12 +478,16 @@ async function autonomousTalk(manual = false) {
         "acg-news": "ACG 新闻",
       }
       prompt = `根据这些标题，用一两句自然的口语中文播报${labels[kind] || "新闻"}，不要逐条念：${topic.items.join("；")}`
+      if (Array.isArray(topic.details) && topic.details.length) {
+        pendingNews = { title: labels[kind] || "新闻详情", items: topic.details }
+      }
     }
   }
   const result = await invoke("chat", { text: prompt, history: [], model: currentModel() })
   if (result?.ok && result.text) {
     lastText = cleanText(result.text)
     showBubble(lastText)
+    if (pendingNews) showNewsButton(pendingNews.items, pendingNews.title)
     speak(lastText)
   } else if (manual) {
     lastText = "我现在还没想好说什么，稍后再聊吧。"
@@ -811,6 +865,7 @@ async function openSettings() {
   composer.classList.add("hidden")
   menu.classList.add("hidden")
   bubble.classList.add("hidden")
+  closeNewsDetail()
   settings.classList.toggle("hidden")
   if (settings.classList.contains("hidden")) return
   settings.scrollTop = 0
@@ -834,7 +889,8 @@ function closeMenu() {
 }
 
 window.addEventListener("contextmenu", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu, .news-detail, .news-more")) return
+  closeNewsDetail()
   event.preventDefault()
   refreshMenu()
   renderModelMenu()
@@ -850,7 +906,7 @@ window.addEventListener("contextmenu", (event) => {
 })
 
 window.addEventListener("dblclick", (event) => {
-  if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .context-menu, .news-detail, .news-more")) return
   if (dancing) stopDance()
   else randomAction()
 })
@@ -908,11 +964,13 @@ document.getElementById("composer-close").addEventListener("click", () => compos
 document.getElementById("settings-close").addEventListener("click", () => settings.classList.add("hidden"))
 document.getElementById("settings-models").addEventListener("click", () => void invoke("open_models"))
 document.getElementById("settings-importAnim").addEventListener("click", () => void importAnimation())
+document.getElementById("news-close").addEventListener("click", closeNewsDetail)
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     settings.classList.add("hidden")
     closeMenu()
+    closeNewsDetail()
   }
 })
 
@@ -934,6 +992,7 @@ function publishZones() {
     !composer.classList.contains("hidden") ||
     !settings.classList.contains("hidden") ||
     !menu.classList.contains("hidden") ||
+    !newsDetail.classList.contains("hidden") ||
     document.querySelector(".dd-list:not(.hidden)")
   ) {
     void invoke("set_zones", { zones: [{ x: 0, y: 28, w: window.innerWidth, h: window.innerHeight - 28 }] })
@@ -951,6 +1010,11 @@ function publishZones() {
 
   if (!bubble.classList.contains("hidden")) {
     const rect = bubble.getBoundingClientRect()
+    zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
+  }
+
+  if (!newsMore.classList.contains("hidden")) {
+    const rect = newsMore.getBoundingClientRect()
     zones.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })
   }
 
@@ -977,6 +1041,7 @@ publishZones()
 window.addEventListener("mousedown", (event) => {
   if (!event.target.closest(".dd")) closeAllDropdowns()
   if (!menu.classList.contains("hidden") && !menu.contains(event.target)) closeMenu()
+  if (!newsDetail.classList.contains("hidden") && !newsDetail.contains(event.target)) closeNewsDetail()
   if (
     !settings.classList.contains("hidden") &&
     !settings.contains(event.target) &&
@@ -985,7 +1050,7 @@ window.addEventListener("mousedown", (event) => {
     settings.classList.add("hidden")
   }
   if (event.button !== 0) return
-  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu")) return
+  if (event.target.closest("input, select, textarea, button, .settings, .composer, .context-menu, .news-detail, .news-more")) return
   dragOrigin = { x: event.clientX, y: event.clientY }
   event.preventDefault()
 })
@@ -1031,6 +1096,7 @@ function animate() {
   }
   if (hiddenAt && performance.now() > hiddenAt) {
     bubble.classList.add("hidden")
+    newsMore.classList.add("hidden")
     hiddenAt = 0
   }
 
