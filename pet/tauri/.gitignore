@@ -12,3 +12,4 @@ convert-bvh.mjs
 mp3/*.mp3
 music_cache/
 memory/*.json
+voices/
