@@ -32,6 +32,65 @@ renderer.setClearColor(0x000000, 0)
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(28, canvas.clientWidth / canvas.clientHeight, 0.1, 20)
 
+let frameTargetX = 0
+let frameTargetY = 0.9
+let frameTargetZ = 3.75
+let frameBaseZ = 3.75
+let frameLookX = 0
+let frameLookY = 0.9
+let frameCheckAt = 0
+const frameBox = new THREE.Box3()
+const framePos = new THREE.Vector3()
+const frameSize = new THREE.Vector3()
+const frameCenter = new THREE.Vector3()
+const frameBones = [
+  "head",
+  "hips",
+  "chest",
+  "leftHand",
+  "rightHand",
+  "leftFoot",
+  "rightFoot",
+  "leftUpperLeg",
+  "rightUpperLeg",
+]
+
+function updateAutoFrame(time) {
+  if (!vrm) return
+  if (time - frameCheckAt > 0.2) {
+    frameCheckAt = time
+    frameBox.makeEmpty()
+    let count = 0
+    for (const name of frameBones) {
+      const node = vrm.humanoid?.getNormalizedBoneNode(name)
+      if (!node) continue
+      node.getWorldPosition(framePos)
+      frameBox.expandByPoint(framePos)
+      count += 1
+    }
+    if (count >= 3) {
+      frameBox.getSize(frameSize)
+      frameBox.getCenter(frameCenter)
+      const fov = THREE.MathUtils.degToRad(camera.fov)
+      const tan = Math.tan(fov / 2)
+      const vertical = (frameSize.y * 1.35) / (2 * tan)
+      const horizontal = (frameSize.x * 1.35) / (2 * tan * Math.max(camera.aspect, 0.2))
+      frameTargetX = frameCenter.x
+      frameTargetY = frameCenter.y
+      const minDistance = Math.max(frameBaseZ, vrmHeight * 1.75)
+      frameTargetZ = Math.min(
+        10,
+        Math.max(vertical, horizontal, minDistance, frameSize.z * 1.5 + 1.0),
+      )
+    }
+  }
+  camera.position.x += (frameTargetX - camera.position.x) * 0.08
+  camera.position.y += (frameTargetY - camera.position.y) * 0.08
+  camera.position.z += (frameTargetZ - camera.position.z) * 0.08
+  frameLookX += (frameTargetX - frameLookX) * 0.08
+  frameLookY += (frameTargetY - frameLookY) * 0.08
+}
+
 scene.add(new THREE.AmbientLight(0xffffff, 1.5))
 const keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
 keyLight.position.set(1.2, 2.4, 2.2)
@@ -47,6 +106,7 @@ loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 let vrm = null
 let mixer = null
 let defaultIdleUrl = ""
+let vrmHeight = 1.5
 let armSign = 1
 let baseYaw = 0
 const restRotations = new Map()
@@ -80,11 +140,19 @@ async function loadModel(url) {
   const box = new THREE.Box3().setFromObject(vrm.scene)
   const size = box.getSize(new THREE.Vector3())
   const height = size.y || 1.5
+  vrmHeight = height
+  frameBaseZ = height * 2.6
   const minY = box.min.y || 0
 
   camera.position.set(0, minY + height * 0.58, height * 2.4)
   camera.lookAt(0, minY + height * 0.58, 0)
   camera.updateProjectionMatrix()
+  frameTargetX = 0
+  frameTargetY = minY + height * 0.58
+  frameTargetZ = height * 2.4
+  frameLookX = 0
+  frameLookY = frameTargetY
+  frameCheckAt = 0
 
   vrm.scene.traverse((object) => {
     if (object.isMesh) object.frustumCulled = false
@@ -1003,6 +1071,8 @@ function animate() {
     }
 
     vrm.update(delta)
+    updateAutoFrame(time)
+    camera.lookAt(frameLookX, frameLookY, 0)
   }
 
   renderer.render(scene, camera)
