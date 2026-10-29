@@ -355,6 +355,13 @@ const modeOptions = [
 const voiceOptions = [
   { value: "zh-CN-XiaoxiaoNeural", label: "晓晓 · 温暖（女）" },
   { value: "zh-CN-XiaoyiNeural", label: "晓伊 · 二次元（女）" },
+  { value: "ja-JP-NanamiNeural", label: "七海 · 日语（女）" },
+  { value: "en-US-AvaMultilingualNeural", label: "Ava · 多语言（女）" },
+  { value: "en-US-EmmaMultilingualNeural", label: "Emma · 多语言（女）" },
+  { value: "fr-FR-VivienneMultilingualNeural", label: "Vivienne · 多语言（女）" },
+  { value: "de-DE-SeraphinaMultilingualNeural", label: "Seraphina · 多语言（女）" },
+  { value: "ko-KR-SunHiNeural", label: "SunHi · 韩语（女）" },
+  { value: "pt-BR-ThalitaMultilingualNeural", label: "Thalita · 多语言（女）" },
   { value: "zh-CN-YunjianNeural", label: "云健 · 激情（男）" },
   { value: "zh-CN-YunxiNeural", label: "云希 · 阳光（男）" },
   { value: "zh-CN-YunxiaNeural", label: "云夏 · 可爱（男）" },

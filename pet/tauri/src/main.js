@@ -354,12 +354,14 @@ function toggleVoice() {
 }
 
 function testVoice() {
+  if (dancing) stopDance(false, false)
   const text = lastText || "你好，我是 OpenCode 桌面宠物，语音测试正常。"
   showBubble(text)
   speak(text, true)
 }
 
 async function speakNext() {
+  if (dancing) stopDance(false, false)
   if (audio) {
     audio.pause()
     audio = null
@@ -497,6 +499,7 @@ async function autonomousTalk(manual = false) {
 }
 
 async function sendPrompt() {
+  if (dancing) stopDance(false, false)
   const text = promptInput.value.trim()
   if (!text) return
   promptInput.value = ""
@@ -537,6 +540,13 @@ const modeOptions = [
 const voiceOptions = [
   { value: "zh-CN-XiaoxiaoNeural", label: "晓晓 · 温暖（女）" },
   { value: "zh-CN-XiaoyiNeural", label: "晓伊 · 二次元（女）" },
+  { value: "ja-JP-NanamiNeural", label: "七海 · 日语（女）" },
+  { value: "en-US-AvaMultilingualNeural", label: "Ava · 多语言（女）" },
+  { value: "en-US-EmmaMultilingualNeural", label: "Emma · 多语言（女）" },
+  { value: "fr-FR-VivienneMultilingualNeural", label: "Vivienne · 多语言（女）" },
+  { value: "de-DE-SeraphinaMultilingualNeural", label: "Seraphina · 多语言（女）" },
+  { value: "ko-KR-SunHiNeural", label: "SunHi · 韩语（女）" },
+  { value: "pt-BR-ThalitaMultilingualNeural", label: "Thalita · 多语言（女）" },
   { value: "zh-CN-YunjianNeural", label: "云健 · 激情（男）" },
   { value: "zh-CN-YunxiNeural", label: "云希 · 阳光（男）" },
   { value: "zh-CN-YunxiaNeural", label: "云夏 · 可爱（男）" },
@@ -713,6 +723,7 @@ function renderAnimMenu() {
 
 let danceAudio = null
 let dancing = false
+let singing = false
 
 function playDefaultIdle() {
   if (defaultIdleUrl) void playAnimation(defaultIdleUrl)
@@ -720,7 +731,9 @@ function playDefaultIdle() {
 
 function stopDance(showText = true, restoreIdle = true) {
   const was = dancing
+  const wasSinging = singing
   dancing = false
+  singing = false
   if (danceAudio) {
     danceAudio.onended = null
     danceAudio.onerror = null
@@ -733,7 +746,7 @@ function stopDance(showText = true, restoreIdle = true) {
     mixer = null
   }
   if (restoreIdle) playDefaultIdle()
-  if (showText && was) showBubble("已停止跳舞")
+  if (showText && was) showBubble(wasSinging ? "已停止唱歌" : "已停止跳舞")
 }
 
 async function startDance() {
@@ -770,6 +783,49 @@ async function startDance() {
     await audio.play()
     await playAnimation(dance.url)
     showBubble(`跳舞中：${dance.name} ♪ ${track.name}`)
+  } catch {
+    stopDance(false)
+    showBubble("音乐播放失败")
+  }
+}
+
+async function startSing() {
+  stopDance(false, false)
+  const tracks = (await invoke("list_music")) || []
+  if (!tracks.length) {
+    showBubble("mp3 文件夹里没有音乐")
+    return
+  }
+  const pool = animationFiles.filter(
+    (item) => item.url && !/^dance/i.test(item.name) && !/^(grabbed|[a-e])$/i.test(item.name),
+  )
+  const action = pool[Math.floor(Math.random() * pool.length)]
+  if (!action) {
+    showBubble("animations 里没有可用动作")
+    return
+  }
+  const track = tracks[Math.floor(Math.random() * tracks.length)]
+  const audio = new Audio(convertFileSrc(track.path))
+  audio.volume = 0.55
+  audio.onended = () => {
+    if (danceAudio === audio) {
+      stopDance(false)
+      showBubble("音乐结束，停止唱歌")
+    }
+  }
+  audio.onerror = () => {
+    if (danceAudio === audio) {
+      stopDance(false)
+      showBubble("音乐播放失败")
+    }
+  }
+  danceAudio = audio
+  dancing = true
+  singing = true
+  try {
+    await audio.play()
+    await playAnimation(action.url)
+    showBubble(`唱歌中：${track.name} ♪`)
   } catch {
     stopDance(false)
     showBubble("音乐播放失败")
@@ -947,6 +1003,7 @@ menu.addEventListener("click", (event) => {
     showBubble(next ? "已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭" : "已关闭点击穿透")
   }
   else if (action === "dance") void startDance()
+  else if (action === "sing") void startSing()
   else if (action === "quit") appWindow.close()
 })
 
@@ -1123,7 +1180,7 @@ function animate() {
     }
     vrm.expressionManager?.setValue("blink", time < blinkUntil ? 1 : 0)
 
-    if (speaking) {
+    if (speaking || singing) {
       mouthTimer -= delta
       if (mouthTimer <= 0) {
         mouthIndex = (mouthIndex + 1 + Math.floor(Math.random() * 2)) % visemes.length
