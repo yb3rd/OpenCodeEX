@@ -222,7 +222,7 @@ ipcMain.handle("pet:open-models", async () => {
 
 ipcMain.handle("pet:speak", async (_event, payload) => {
   const text = String(payload?.text || "").slice(0, 500)
-  const voice = String(payload?.voice || "zh-CN-XiaoxiaoNeural")
+  const voice = String(payload?.voice || "zh-CN-XiaoyiNeural")
   const rate = String(payload?.rate || "+0%")
   const pitch = String(payload?.pitch || "+0Hz")
   if (!text || voice === "system") return { ok: false }

@@ -98,8 +98,6 @@ body {
   right: 8px;
   bottom: 10px;
   width: 280px;
-  max-height: calc(100vh - 20px);
-  overflow-y: auto;
   padding: 10px;
   border-radius: 10px;
   background: rgba(22, 24, 29, 0.96);
@@ -114,6 +112,29 @@ body {
 .settings-title {
   font-weight: 600;
   font-size: 13px;
+}
+
+.settings-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.settings-close:hover {
+  background: rgba(220, 90, 90, 0.55);
+  color: #fff;
 }
 
 .settings label {
@@ -166,6 +187,7 @@ body {
 }
 
 .dd-list {
+  box-sizing: border-box;
   position: absolute;
   left: 0;
   right: 0;
@@ -218,6 +240,7 @@ body {
 }
 
 .context-menu {
+  box-sizing: border-box;
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   position: absolute;

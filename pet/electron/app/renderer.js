@@ -165,7 +165,7 @@ let audio = null
 
 async function speak(text, force = false) {
   if (!voiceOn && !force) return
-  const voice = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural"
+  const voice = localStorage.getItem("pet.voiceName") || "zh-CN-XiaoyiNeural"
   if (voice !== "system") {
     const rate = localStorage.getItem("pet.rate") || "+0%"
     const pitch = localStorage.getItem("pet.pitch") || "+0Hz"
@@ -431,6 +431,7 @@ function createDropdown(root, options, value, onChange) {
     list.classList.toggle("up", openUp)
     list.style.maxHeight = `${Math.max(80, Math.min(220, openUp ? above : below))}px`
     list.classList.toggle("hidden")
+    list.scrollTop = 0
   })
 
   root.append(trigger, list)
@@ -541,10 +542,14 @@ async function loadAnimationList() {
   renderAnimMenu()
 }
 
+if (localStorage.getItem("pet.voiceName") === "zh-CN-XiaoxiaoNeural" && !localStorage.getItem("pet.voice.anime")) {
+  localStorage.setItem("pet.voiceName", "zh-CN-XiaoyiNeural")
+  localStorage.setItem("pet.voice.anime", "1")
+}
 const voiceDropdown = createDropdown(
   ddVoice,
   voiceOptions,
-  localStorage.getItem("pet.voiceName") || "zh-CN-XiaoxiaoNeural",
+  localStorage.getItem("pet.voiceName") || "zh-CN-XiaoyiNeural",
   (value) => {
     localStorage.setItem("pet.voiceName", value)
     voiceOn = true
@@ -589,6 +594,7 @@ async function openSettings() {
   menu.classList.add("hidden")
   settings.classList.toggle("hidden")
   if (settings.classList.contains("hidden")) return
+  settings.scrollTop = 0
   if (!models.length) models = (await window.pet?.models()) || []
   fillModels()
   void loadAnimationList()
@@ -666,6 +672,14 @@ menu.addEventListener("click", (event) => {
 
 sendButton.addEventListener("click", () => void sendPrompt())
 document.getElementById("composer-close").addEventListener("click", () => composer.classList.add("hidden"))
+document.getElementById("settings-close").addEventListener("click", () => settings.classList.add("hidden"))
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    settings.classList.add("hidden")
+    closeMenu()
+  }
+})
 
 promptInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -681,6 +695,16 @@ let dragging = false
 let lastInteractive = null
 
 function publishZones() {
+  if (
+    !composer.classList.contains("hidden") ||
+    !settings.classList.contains("hidden") ||
+    !menu.classList.contains("hidden") ||
+    document.querySelector(".dd-list:not(.hidden)")
+  ) {
+    window.pet?.setZones([{ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }])
+    return
+  }
+
   const zones = []
   const canvasRect = canvas.getBoundingClientRect()
   zones.push({
