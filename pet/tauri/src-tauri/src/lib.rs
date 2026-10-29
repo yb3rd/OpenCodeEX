@@ -67,6 +67,34 @@ struct NewsItem {
     meta: Option<String>,
 }
 
+#[derive(Serialize)]
+struct SongTrack {
+    name: String,
+    path: String,
+    title: String,
+    artist: String,
+    source: String,
+}
+
+fn sanitize_filename(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars() {
+        if out.chars().count() >= 80 {
+            break;
+        }
+        if ch.is_control() || matches!(ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+            continue;
+        }
+        out.push(ch);
+    }
+    let trimmed = out.trim().trim_matches('.').to_string();
+    if trimmed.is_empty() {
+        "song".to_string()
+    } else {
+        trimmed
+    }
+}
+
 fn project_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let mut cur = exe.parent()?.to_path_buf();
@@ -110,6 +138,10 @@ fn animations_dir(app: &AppHandle) -> PathBuf {
 
 fn music_dir(app: &AppHandle) -> PathBuf {
     asset_root(app).join("mp3")
+}
+
+fn music_cache_dir(app: &AppHandle) -> PathBuf {
+    asset_root(app).join("music_cache")
 }
 
 fn memory_dir(app: &AppHandle) -> PathBuf {
@@ -175,6 +207,167 @@ fn list_music(app: AppHandle) -> Vec<FileEntry> {
                 .unwrap_or(false)
         })
         .collect()
+}
+
+#[tauri::command]
+async fn fetch_song(app: AppHandle, query: String) -> serde_json::Value {
+    let query = query.trim().chars().take(80).collect::<String>();
+    if query.is_empty() {
+        return json!({ "ok": false, "error": "empty query" });
+    }
+    let client = match reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .timeout(Duration::from_secs(30))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => return json!({ "ok": false, "error": error.to_string() }),
+    };
+    let search_response = client
+        .get("https://music.163.com/api/search/get/web")
+        .query(&[("s", query.as_str()), ("type", "1"), ("limit", "8")])
+        .header("Referer", "https://music.163.com/")
+        .send()
+        .await;
+    let search_json = match search_response {
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(json) => json,
+            Err(error) => return json!({ "ok": false, "error": error.to_string() }),
+        },
+        Err(error) => return json!({ "ok": false, "error": error.to_string() }),
+    };
+    let songs = search_json
+        .get("result")
+        .and_then(|result| result.get("songs"))
+        .and_then(|songs| songs.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if songs.is_empty() {
+        return json!({ "ok": false, "error": "not found" });
+    }
+
+    let dir = music_cache_dir(&app);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return json!({ "ok": false, "error": "cannot create music_cache" });
+    }
+    let mut last_error = String::from("not found");
+    for song in songs.iter().take(3) {
+        let Some(id) = song.get("id").and_then(|value| value.as_u64()) else {
+            continue;
+        };
+        let title = song
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if title.is_empty() {
+            continue;
+        }
+        let artist = song
+            .get("artists")
+            .and_then(|value| value.as_array())
+            .map(|artists| {
+                artists
+                    .iter()
+                    .filter_map(|artist| artist.get("name").and_then(|value| value.as_str()))
+                    .collect::<Vec<_>>()
+                    .join(" / ")
+            })
+            .unwrap_or_default();
+        let display = if artist.is_empty() {
+            title.clone()
+        } else {
+            format!("{title} - {artist}")
+        };
+        let file = dir.join(format!(
+            "netease-{id}-{}.mp3",
+            sanitize_filename(&display)
+        ));
+        if let Ok(meta) = std::fs::metadata(&file) {
+            if meta.len() > 32_768 {
+                return json!({
+                    "ok": true,
+                    "track": SongTrack {
+                        name: display,
+                        path: file.to_string_lossy().to_string(),
+                        title,
+                        artist,
+                        source: "网易云音乐".to_string(),
+                    }
+                });
+            }
+        }
+
+        let url = format!("https://music.163.com/song/media/outer/url?id={id}.mp3");
+        let response = match client
+            .get(&url)
+            .header("Referer", "https://music.163.com/")
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = error.to_string();
+                continue;
+            }
+        };
+        if !response.status().is_success() {
+            last_error = format!("status {}", response.status());
+            continue;
+        }
+        if let Some(content_type) = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+        {
+            if content_type.starts_with("text/") {
+                last_error = "invalid content type".to_string();
+                continue;
+            }
+        }
+        if response.content_length().unwrap_or(0) > 60_000_000 {
+            last_error = "file too large".to_string();
+            continue;
+        }
+        let bytes = match response.bytes().await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                last_error = error.to_string();
+                continue;
+            }
+        };
+        if bytes.len() < 32_768 {
+            last_error = "file too small".to_string();
+            continue;
+        }
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        let tmp = dir.join(format!(".download-{id}-{stamp}.part"));
+        if std::fs::write(&tmp, bytes.as_ref()).is_err() {
+            last_error = "write failed".to_string();
+            continue;
+        }
+        let _ = std::fs::remove_file(&file);
+        if std::fs::rename(&tmp, &file).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            last_error = "rename failed".to_string();
+            continue;
+        }
+        return json!({
+            "ok": true,
+            "track": SongTrack {
+                name: display,
+                path: file.to_string_lossy().to_string(),
+                title,
+                artist,
+                source: "网易云音乐".to_string(),
+            }
+        });
+    }
+    json!({ "ok": false, "error": last_error })
 }
 
 #[tauri::command]
@@ -1059,6 +1252,7 @@ pub fn run() {
             list_model_files,
             list_animations,
             list_music,
+            fetch_song,
             load_memory,
             save_memory,
             open_url,

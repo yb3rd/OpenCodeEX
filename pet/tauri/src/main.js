@@ -915,8 +915,14 @@ function openComposer() {
   hideChoices()
   stopSpeech()
   scheduleNextTalk()
+  promptInput.placeholder = "对宠物说点什么…（Enter 发送）"
   composer.classList.remove("hidden")
   promptInput.focus()
+}
+
+function openSongComposer() {
+  openComposer()
+  promptInput.placeholder = "想听什么歌？例如：播放 起风了"
 }
 
 let memory = { history: [], summary: "", updatedAt: 0, userTurns: 0 }
@@ -1075,6 +1081,103 @@ async function autonomousTalk(manual = false, forcedKind = "") {
   talkBusy = false
 }
 
+function songQueryResult(query, strict) {
+  const cleaned = query.trim().replace(/^[《"“「]|[》"”」]$/g, "").trim()
+  if (!cleaned || /^(?:歌|歌曲|音乐|一首歌|首歌|点歌|吧|呀|啊)$/.test(cleaned)) {
+    return { generic: true }
+  }
+  if (strict && /^(?:你|我|他|她|它|说|点|什么|啥|得|的|真|好|不|没|太|很)/.test(cleaned)) {
+    return null
+  }
+  if (/^(?:器|列表|记录|失败|中|完|了|得|的|真|好|不|没|太|很)/.test(cleaned)) return null
+  return { query: cleaned }
+}
+
+function parseSongRequest(text) {
+  const cleaned = text.trim().replace(/[。！!？?]+$/g, "").trim()
+  if (!cleaned) return null
+
+  const quoted = cleaned.match(
+    /(?:播放|放|唱|点|听)[^《"“「]{0,8}[《"“「]([^》"”」]+)[》"”」]/,
+  )
+  if (quoted) {
+    const query = quoted[1].trim()
+    return query ? { query } : null
+  }
+
+  const want = cleaned.match(
+    /^(?:我)?(?:想|要)(听|点|唱)(?:一首|首|个|一下)?(?:歌曲|歌)?[：:\s]*(.*?)(?:吧|好吗|可以吗|呗)?$/,
+  )
+  if (want) {
+    if (want[1] === "点" && !/[歌首《"“「]/.test(cleaned)) return null
+    return songQueryResult(want[2], true)
+  }
+
+  const weakVerb = cleaned.match(/(?:^|[给帮为请能可以麻烦我，,\s])(放|来|点|听)(.)/)
+  if (weakVerb && !/[一首个下点歌音《"“「\s：:]/.test(weakVerb[2])) return null
+
+  const direct = cleaned.match(
+    /^(?:(?:小尤|宝贝)[，,\s]*)?(?:(?:请|麻烦|能不能|可不可以|可以|能)[，,\s]*)?(?:(?:给我|帮我|为我)[，,\s]*)?(?:播放|放|来|唱|点|听)(?:一首|首|一个|一下|点)?(?:歌曲|歌)?[：:\s]*(.*?)(?:吧|好吗|可以吗|呗)?$/,
+  )
+  if (direct) return songQueryResult(direct[1], false)
+  return null
+}
+
+function saveSongTurn(userText, assistantText) {
+  history.push({ role: "user", content: userText })
+  history.push({ role: "assistant", content: assistantText })
+  history = history.slice(-100)
+  memory.userTurns = (memory.userTurns || 0) + 1
+  saveHistory()
+  if (memory.userTurns % 4 === 0) void updateMemory()
+}
+
+async function playRequestedSong(request, userText) {
+  if (request.generic) {
+    lastText = "好呀，给你放首歌～"
+    showBubble(lastText)
+    saveSongTurn(userText, "好呀，给你放了一首歌。")
+    await startSing()
+    return
+  }
+
+  const query = request.query
+  showBubble(`正在网上找《${query}》…`)
+  talkBusy = true
+  let result = null
+  try {
+    result = await invoke("fetch_song", { query }).catch(() => null)
+  } finally {
+    talkBusy = false
+  }
+
+  if (result?.ok && result.track) {
+    const track = result.track
+    lastText = `找到啦，为你播放《${track.name}》。`
+    showBubble(lastText)
+    saveSongTurn(userText, lastText)
+    await startSing(track)
+    return
+  }
+
+  console.error("[song] fetch failed", result?.error)
+  const localTracks = (await invoke("list_music").catch(() => [])) || []
+  const needle = query.toLowerCase()
+  const local = localTracks.find((item) => item.name.toLowerCase().includes(needle))
+  if (local) {
+    lastText = `网上没找到，先放本地的《${local.name}》～`
+    showBubble(lastText)
+    saveSongTurn(userText, lastText)
+    await startSing(local)
+    return
+  }
+
+  lastText = `没找到能播放的《${query}》，换个歌名或加上歌手试试？`
+  showBubble(lastText)
+  speak(lastText)
+  saveSongTurn(userText, lastText)
+}
+
 async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   if (dancing) stopDance(false, false)
   stopSpeech()
@@ -1082,6 +1185,11 @@ async function sendPrompt(rawText, contextQuestion = null, displayText = null) {
   if (!text) return
   if (rawText == null) promptInput.value = ""
   composer.classList.add("hidden")
+  const songRequest = parseSongRequest(text)
+  if (songRequest) {
+    await playRequestedSong(songRequest, text)
+    return
+  }
   showBubble(`你：${displayText || text}`)
   const outgoingHistory = contextQuestion
     ? [...history, { role: "assistant", content: contextQuestion }]
@@ -1397,9 +1505,9 @@ async function startDance() {
   }
 }
 
-async function startSing() {
+async function startSing(trackOverride = null) {
   stopDance(false, false)
-  const tracks = (await invoke("list_music")) || []
+  const tracks = trackOverride ? [trackOverride] : (await invoke("list_music")) || []
   if (!tracks.length) {
     showBubble("mp3 文件夹里没有音乐")
     return
@@ -1617,6 +1725,7 @@ menu.addEventListener("click", (event) => {
   }
   closeMenu()
   if (action === "compose") openComposer()
+  else if (action === "song") openSongComposer()
   else if (action === "voice") testVoice()
   else if (action === "voiceNext") void speakNext()
   else if (action === "mute") toggleVoice()
