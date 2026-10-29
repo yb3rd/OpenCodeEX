@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm"
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 
 const appWindow = getCurrentWindow()
@@ -511,6 +512,7 @@ async function loadModelFiles() {
 }
 
 let animationFiles = []
+let lastRandomAction = ""
 
 function renderAnimMenu() {
   if (!menuAnimList) return
@@ -528,6 +530,16 @@ function renderAnimMenu() {
     })
     menuAnimList.append(button)
   }
+}
+
+function randomAction() {
+  const pool = animationFiles.filter((item) => item.url && !/^(grabbed|[a-e])$/i.test(item.name))
+  if (!pool.length) return
+  const choices = pool.length > 1 ? pool.filter((item) => item.name !== lastRandomAction) : pool
+  const pick = choices[Math.floor(Math.random() * choices.length)]
+  lastRandomAction = pick.name
+  void playAnimation(pick.url)
+  showBubble(`动作：${pick.name}`)
 }
 
 async function loadAnimationList() {
@@ -634,7 +646,7 @@ window.addEventListener("contextmenu", (event) => {
 
 window.addEventListener("dblclick", (event) => {
   if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
-  openComposer()
+  randomAction()
 })
 
 menu.addEventListener("click", (event) => {
@@ -665,6 +677,11 @@ menu.addEventListener("click", (event) => {
   else if (action === "voiceNext") void speakNext()
   else if (action === "mute") toggleVoice()
   else if (action === "settings") void openSettings()
+  else if (action === "clickThrough") {
+    localStorage.setItem("pet.clickThrough", "1")
+    void invoke("set_click_through", { enabled: true })
+    showBubble("已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭")
+  }
   else if (action === "models") void invoke("open_models")
   else if (action === "importAnim") {
     void (async () => {
@@ -848,3 +865,9 @@ animate()
 void loadAnimationList()
 void loadModelFiles()
 void ensureDefaultModel()
+if (localStorage.getItem("pet.clickThrough") === "1") {
+  void invoke("set_click_through", { enabled: true })
+}
+void listen("click-through-changed", (event) => {
+  localStorage.setItem("pet.clickThrough", event.payload ? "1" : "0")
+})

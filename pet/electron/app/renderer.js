@@ -507,6 +507,7 @@ async function loadModelFiles() {
 }
 
 let animationFiles = []
+let lastRandomAction = ""
 
 function renderAnimMenu() {
   if (!menuAnimList) return
@@ -524,6 +525,16 @@ function renderAnimMenu() {
     })
     menuAnimList.append(button)
   }
+}
+
+function randomAction() {
+  const pool = animationFiles.filter((item) => item.url && !/^(grabbed|[a-e])$/i.test(item.name))
+  if (!pool.length) return
+  const choices = pool.length > 1 ? pool.filter((item) => item.name !== lastRandomAction) : pool
+  const pick = choices[Math.floor(Math.random() * choices.length)]
+  lastRandomAction = pick.name
+  void playAnimation(pick.url)
+  showBubble(`动作：${pick.name}`)
 }
 
 async function loadAnimationList() {
@@ -630,7 +641,7 @@ window.addEventListener("contextmenu", (event) => {
 
 window.addEventListener("dblclick", (event) => {
   if (event.target.closest("input, select, textarea, button, .settings, .context-menu")) return
-  openComposer()
+  randomAction()
 })
 
 menu.addEventListener("click", (event) => {

@@ -5,11 +5,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{
+    menu::{CheckMenuItem, Menu, MenuItem},
+    tray::TrayIconBuilder,
+    AppHandle, Emitter, Manager, State, WebviewWindow, Wry,
+};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 struct PetState {
     zones: Mutex<Vec<Zone>>,
+    click_item: Mutex<Option<CheckMenuItem<Wry>>>,
 }
 
 #[derive(Clone, Deserialize, Default, PartialEq)]
@@ -563,6 +569,35 @@ async fn speak(text: String, voice: String, rate: String, pitch: String) -> serd
 }
 
 #[tauri::command]
+fn set_click_through(app: AppHandle, window: WebviewWindow, enabled: bool) {
+    let _ = window.set_ignore_cursor_events(enabled);
+    if let Ok(item) = app.state::<PetState>().click_item.lock() {
+        if let Some(item) = item.as_ref() {
+            let _ = item.set_checked(enabled);
+        }
+    }
+}
+
+fn toggle_click_through(app: &AppHandle) {
+    let state = app.state::<PetState>();
+    let enabled = {
+        let item = state.click_item.lock().ok();
+        item.and_then(|item| item.as_ref().and_then(|item| item.is_checked().ok()))
+            .map(|checked| !checked)
+            .unwrap_or(true)
+    };
+    if let Ok(item) = state.click_item.lock() {
+        if let Some(item) = item.as_ref() {
+            let _ = item.set_checked(enabled);
+        }
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(enabled);
+    }
+    let _ = app.emit("click-through-changed", enabled);
+}
+
+#[tauri::command]
 fn set_zones(window: WebviewWindow, state: State<'_, PetState>, zones: Vec<Zone>) {
     let zones = zones
         .into_iter()
@@ -648,9 +683,19 @@ fn place_bottom_right(window: &WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        toggle_click_through(app);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .manage(PetState {
             zones: Mutex::new(Vec::new()),
+            click_item: Mutex::new(None),
         })
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -660,6 +705,37 @@ pub fn run() {
             let handle = app.handle().clone();
             let _ = std::fs::create_dir_all(models_dir(&handle));
             let _ = std::fs::create_dir_all(animations_dir(&handle));
+
+            let click_item = CheckMenuItem::with_id(
+                app,
+                "click_through",
+                "点击穿透（不挡其他窗口）",
+                true,
+                false,
+                None::<&str>,
+            )?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&click_item, &quit_item])?;
+            let mut tray = TrayIconBuilder::new()
+                .tooltip("OpenCode Pet")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(true)
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "click_through" => toggle_click_through(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+            if let Ok(mut item) = app.state::<PetState>().click_item.lock() {
+                *item = Some(click_item);
+            }
+            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyP);
+            if let Err(error) = app.global_shortcut().register(shortcut) {
+                eprintln!("failed to register global shortcut: {error}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -671,7 +747,8 @@ pub fn run() {
             open_models,
             topic,
             speak,
-            set_zones
+            set_zones,
+            set_click_through
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
