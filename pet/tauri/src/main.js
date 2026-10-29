@@ -623,6 +623,11 @@ async function openSettings() {
 function refreshMenu() {
   const muteItem = menu.querySelector('[data-action="mute"]')
   if (muteItem) muteItem.textContent = voiceOn ? "🔇 静音" : "🔊 开启朗读"
+  const clickItem = menu.querySelector('[data-action="clickThrough"]')
+  if (clickItem) {
+    clickItem.textContent =
+      localStorage.getItem("pet.clickThrough") === "1" ? "🖱 点击穿透：开" : "🖱 点击穿透：关"
+  }
 }
 
 function closeMenu() {
@@ -638,6 +643,7 @@ window.addEventListener("contextmenu", (event) => {
   menuModelList?.classList.add("hidden")
   menuAnimList?.classList.add("hidden")
   menu.classList.remove("hidden")
+  menu.scrollTop = 0
   const width = menu.offsetWidth
   const height = menu.offsetHeight
   menu.style.left = `${Math.max(6, Math.min(event.clientX, window.innerWidth - width - 6))}px`
@@ -678,9 +684,11 @@ menu.addEventListener("click", (event) => {
   else if (action === "mute") toggleVoice()
   else if (action === "settings") void openSettings()
   else if (action === "clickThrough") {
-    localStorage.setItem("pet.clickThrough", "1")
-    void invoke("set_click_through", { enabled: true })
-    showBubble("已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭")
+    const next = localStorage.getItem("pet.clickThrough") !== "1"
+    localStorage.setItem("pet.clickThrough", next ? "1" : "0")
+    void invoke("set_click_through", { enabled: next })
+    refreshMenu()
+    showBubble(next ? "已开启点击穿透，Ctrl+Alt+P 或托盘菜单关闭" : "已关闭点击穿透")
   }
   else if (action === "models") void invoke("open_models")
   else if (action === "importAnim") {
@@ -870,4 +878,5 @@ if (localStorage.getItem("pet.clickThrough") === "1") {
 }
 void listen("click-through-changed", (event) => {
   localStorage.setItem("pet.clickThrough", event.payload ? "1" : "0")
+  refreshMenu()
 })

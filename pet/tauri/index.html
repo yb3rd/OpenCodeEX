@@ -19,7 +19,7 @@
 
     <div id="settings" class="settings hidden">
       <button id="settings-close" class="settings-close" title="关闭">✕</button>
-      <div class="settings-title">设置</div>
+      <div class="settings-title">设置 <span class="build">v2026.10.29</span></div>
       <label>
         <span>来源</span>
         <div class="dd" id="dd-mode"></div>
@@ -46,6 +46,8 @@
     <div id="menu" class="context-menu hidden">
       <button class="menu-close" data-action="closeMenu" title="关闭">✕</button>
       <button data-action="compose">💬 输入消息</button>
+      <button data-action="clickThrough">🖱 点击穿透：关</button>
+      <button data-action="settings">⚙ 设置</button>
       <button data-action="voice">📢 朗读上一条</button>
       <button data-action="voiceNext">📢 朗读下一条</button>
       <button data-action="mute">🔇 静音</button>
@@ -57,8 +59,6 @@
         <button data-action="switchAnim">🎬 动作</button>
         <div id="anim-list" class="menu-sub hidden"></div>
       </div>
-      <button data-action="clickThrough">🖱 点击穿透</button>
-      <button data-action="settings">⚙ 设置</button>
       <button data-action="models">📁 打开模型文件夹</button>
       <button data-action="importAnim">📥 导入动作文件</button>
       <div class="sep"></div>

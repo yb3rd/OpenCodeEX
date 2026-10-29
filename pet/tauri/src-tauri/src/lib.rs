@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -599,6 +599,8 @@ fn toggle_click_through(app: &AppHandle) {
 
 #[tauri::command]
 fn set_zones(window: WebviewWindow, state: State<'_, PetState>, zones: Vec<Zone>) {
+    #[cfg(windows)]
+    ensure_frameless(&window);
     let zones = zones
         .into_iter()
         .filter(|zone| zone.w > 1.0 && zone.h > 1.0)
@@ -617,6 +619,22 @@ fn set_zones(window: WebviewWindow, state: State<'_, PetState>, zones: Vec<Zone>
     {
         let _ = &window;
     }
+}
+
+#[cfg(windows)]
+fn ensure_frameless(window: &WebviewWindow) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongW, GWL_STYLE, WS_CAPTION};
+
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    unsafe {
+        let style = GetWindowLongW(hwnd.0 as _, GWL_STYLE);
+        if style & (WS_CAPTION as i32) == 0 {
+            return;
+        }
+    }
+    remove_window_frame(window);
 }
 
 #[cfg(windows)]
@@ -712,6 +730,14 @@ fn place_bottom_right(window: &WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                #[cfg(windows)]
+                ensure_frameless(&window);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -734,6 +760,24 @@ pub fn run() {
                 #[cfg(windows)]
                 remove_window_frame(&window);
                 place_bottom_right(&window);
+
+                #[cfg(windows)]
+                {
+                    let win = window.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(1200));
+                        let win2 = win.clone();
+                        let _ = win.run_on_main_thread(move || {
+                            remove_window_frame(&win2);
+                            let _ = win2.show();
+                            let _ = win2.set_focus();
+                        });
+                    });
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = window.show();
+                }
             }
             let handle = app.handle().clone();
             let _ = std::fs::create_dir_all(models_dir(&handle));
@@ -750,7 +794,7 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&click_item, &quit_item])?;
             let mut tray = TrayIconBuilder::new()
-                .tooltip("OpenCode Pet")
+                .tooltip("OpenCode Pet v2026.10.29")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
